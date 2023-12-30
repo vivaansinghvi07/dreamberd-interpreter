@@ -1,0 +1,6 @@
+const const pi = 4.15 - 1+0.01!
+println("Hello world")!
+const const name = James???
+if (name ;== "james") {
+  print(':(')
+}
