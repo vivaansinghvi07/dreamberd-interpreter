@@ -1,29 +1,44 @@
 from __future__ import annotations
+from abc import ABCMeta, abstractmethod
 from typing import Optional, Union
 
 from base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, VAR_DECL_KW
 
-class ListNode:
+class SyntaxTreeNode(metaclass=ABCMeta):
+    @abstractmethod
+    def to_string(self, tabs: int = 0) -> str: pass
+
+class ListNode(SyntaxTreeNode):
     def __init__(self, values: list[SyntaxTreeNode]):
         self.values = values
+    def to_string(self, tabs: int = 0) -> str:
+        return f"{'  ' * tabs}Values: \n" + \
+               "\n".join([f"{v.to_string(tabs + 1)}" for v in self.values])
 
-class ExpressionNode:
+class ExpressionNode(SyntaxTreeNode):
     def __init__(self, left: SyntaxTreeNode, right: SyntaxTreeNode, operator: OperatorType):
         self.left = left 
         self.right = right
         self.operator = operator
+    def to_string(self, tabs: int = 0) -> str:
+        return f"{'  ' * tabs}Operator: {self.operator}\n" + \
+               f"{self.left.to_string(tabs + 1)}\n" + \
+               f"{self.right.to_string(tabs + 1)}"
 
-class FunctionNode:
+class FunctionNode(SyntaxTreeNode):
     def __init__(self, name: str, args: list[SyntaxTreeNode]):
         self.name = name 
         self.args = args
+    def to_string(self, tabs: int = 0) -> str:
+        return f"{'  ' * tabs}Name: {self.name}\n" + f"{'  ' * tabs}Arguments: \n" + \
+               "\n".join([f"{arg.to_string(tabs + 1)}" for arg in self.args]) 
 
-class Value:
+class Value(SyntaxTreeNode):
     def __init__(self, name_or_value: str, index: Optional[SyntaxTreeNode] = None): 
         self.name_or_value = name_or_value
         self.index = index
-
-SyntaxTreeNode = Union[ExpressionNode, FunctionNode, Value, ListNode]
+    def to_string(self, tabs: int = 0) -> str:
+        return f"{'  ' * tabs}Value: {self.name_or_value}"
 
 def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
     """ 
@@ -101,10 +116,12 @@ def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
                 ]
             ])
         elif is_valid_list:
+            print(all_commas)
+            print(tokens)
             return ListNode([
                 build_expression_tree(filename, t) for t in [
                     tokens[comma_index + 1:next_index] for comma_index, next_index in 
-                    zip([int(tokens[0].type == TokenType.WHITESPACE) + 1, *all_commas], 
+                    zip([int(tokens[0].type == TokenType.WHITESPACE), *all_commas], 
                         [*all_commas, len(tokens) - 1 - int(tokens[-1].type == TokenType.WHITESPACE)])  # adjusting here in order to avoid the bracket tokens
                 ]
             ])
