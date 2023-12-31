@@ -68,7 +68,8 @@ def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
                 if tokens[i + 1].type == TokenType.WHITESPACE:
                     r_len = len(tokens[i + 1].value)
                 if l_len != r_len:
-                    raise InterpretationError(filename, tokens[i].line, "Whitespace must be equal on either side of an operator.")
+                    raise InterpretationError(filename, tokens[i].line, "Whitespace must be equal on either side of an operator{}.".format(
+                                              ' (yes, commas count too)' if updated_list[i] == OperatorType.COM else ''))
                 if l_len >= max_width:
                     max_width = l_len
                     max_index = i

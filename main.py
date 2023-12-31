@@ -11,9 +11,11 @@ def main():
     pass
 
 if __name__ == "__main__":
-    tokens = lexer.tokenize("test.db", "func 1 , [3,4,5] , 3^7  +  90")
+    code = "1+1^3  *  func(a, b)"
+    tokens = lexer.tokenize("test.db", code)
     exp = build_expression_tree("test.db", tokens)
-    print(exp.to_string())
+    print('\n', code, '\n')
+    print(exp.to_string(), '\n')
     # with open(sys.argv[1]) as f:
     #     code = f.read()
     # lexer.tokenize(sys.argv[1], code)
