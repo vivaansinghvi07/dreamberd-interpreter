@@ -1,8 +1,8 @@
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
-from typing import Optional, Union
+from typing import Optional
 
-from base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, VAR_DECL_KW
+from base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, VAR_DECL_KW, raise_error_at_line, raise_error_at_token
 
 class SyntaxTreeNode(metaclass=ABCMeta):
     @abstractmethod
@@ -12,8 +12,9 @@ class ListNode(SyntaxTreeNode):
     def __init__(self, values: list[SyntaxTreeNode]):
         self.values = values
     def to_string(self, tabs: int = 0) -> str:
-        return f"{'  ' * tabs}Values: \n" + \
-               "\n".join([f"{v.to_string(tabs + 1)}" for v in self.values])
+        return f"{'  ' * tabs}List: \n" + \
+               f"{'  ' * (tabs + 1)}Values: \n" + \
+               "\n".join([f"{v.to_string(tabs + 2)}" for v in self.values])
 
 class ExpressionNode(SyntaxTreeNode):
     def __init__(self, left: SyntaxTreeNode, right: SyntaxTreeNode, operator: OperatorType):
@@ -21,17 +22,22 @@ class ExpressionNode(SyntaxTreeNode):
         self.right = right
         self.operator = operator
     def to_string(self, tabs: int = 0) -> str:
-        return f"{'  ' * tabs}Operator: {self.operator}\n" + \
-               f"{self.left.to_string(tabs + 1)}\n" + \
-               f"{self.right.to_string(tabs + 1)}"
+        return f"{'  ' * tabs}Expression: \n" + \
+               f"{'  ' * (tabs + 1)}Operator: {self.operator}\n" + \
+               f"{'  ' * (tabs + 1)}Left: \n" + \
+               f"{self.left.to_string(tabs + 2)}\n" + \
+               f"{'  ' * (tabs + 1)}Right: \n" + \
+               f"{self.right.to_string(tabs + 2)}"
 
 class FunctionNode(SyntaxTreeNode):
     def __init__(self, name: str, args: list[SyntaxTreeNode]):
         self.name = name 
         self.args = args
     def to_string(self, tabs: int = 0) -> str:
-        return f"{'  ' * tabs}Name: {self.name}\n" + f"{'  ' * tabs}Arguments: \n" + \
-               "\n".join([f"{arg.to_string(tabs + 1)}" for arg in self.args]) 
+        return f"{'  ' * tabs}Function: \n" + \
+               f"{'  ' * (tabs + 1)}Name: {self.name}\n" + \
+               f"{'  ' * (tabs + 1)}Arguments: \n" + \
+               "\n".join([f"{arg.to_string(tabs + 2)}" for arg in self.args]) 
 
 class Value(SyntaxTreeNode):
     def __init__(self, name_or_value: str, index: Optional[SyntaxTreeNode] = None): 
@@ -40,7 +46,7 @@ class Value(SyntaxTreeNode):
     def to_string(self, tabs: int = 0) -> str:
         return f"{'  ' * tabs}Value: {self.name_or_value}"
 
-def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
+def build_expression_tree(filename: str, tokens: list[Token], code: str) -> SyntaxTreeNode:
     """ 
     This language has significant whitespace, so the biggest split happens where there is most space
      - func a, b  +  c becomes func(a, b) + c but func a, b+c  becomes func(a, b + c) 
@@ -50,7 +56,7 @@ def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
 
     for token in tokens:
         if token.type == TokenType.WHITESPACE and '\t' in token.value:
-            raise InterpretationError(filename, token.line, "Tabs are not allowed in expressions.")
+            raise_error_at_token(filename, code, "Tabs are not allowed in expressions.", token)
     
     # create a new list consisting and tokens and a brand new type: the list 
     tokens_without_whitespace = [token for token in tokens if token.type != TokenType.WHITESPACE]
@@ -67,20 +73,20 @@ def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
                     l_len = len(tokens[i - 1].value)
                 if tokens[i + 1].type == TokenType.WHITESPACE:
                     r_len = len(tokens[i + 1].value)
-                if l_len != r_len:
-                    raise InterpretationError(filename, tokens[i].line, "Whitespace must be equal on either side of an operator{}.".format(
-                                              ' (yes, commas count too)' if updated_list[i] == OperatorType.COM else ''))
-                if l_len >= max_width:
-                    max_width = l_len
+                if l_len != r_len and updated_list[i] != OperatorType.COM:
+                    raise_error_at_token(filename, code, "Whitespace must be equal on either side of an operator.", tokens[i])
+                if r_len >= max_width:
+                    max_width = r_len
                     max_index = i
             except IndexError:
-                raise InterpretationError(filename, tokens[i].line, "Operator cannot be at the end of an expression.")
+                raise_error_at_token(filename, code, "Operator cannot be at the end of an expression.", tokens[i])
 
     # there is no operator, must be just a value
     if max_index == -1:
         name_or_value = tokens_without_whitespace[0]
         if name_or_value.type != TokenType.NAME:
-            raise InterpretationError(filename, name_or_value.line, "Expected name or value.")
+            raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0])
+        end, start = 0, 0  # this is just here so pyright won't yell at me
         if any(l := [token.type == TokenType.L_SQUARE for token in tokens]):
             start, end = l.index(True), len(tokens) - 1
             while end > start:
@@ -88,8 +94,8 @@ def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
                     break
                 end -= 1
             else:
-                raise InterpretationError(filename, tokens[start].line, "Excepted closing brace for index operation.")
-        return Value(name_or_value.value, tokens[start + 1 : end] if any(l) else None)  # it's not unbound trust me pyright
+                raise_error_at_line(filename, code, tokens[start].line, "Excepted closing brace for index operation.")
+        return Value(name_or_value.value, build_expression_tree(filename, tokens[start + 1 : end], code) if any(l) else None)  
         
     # max_index is the token with the maximum surrouding whitespace 
     if updated_list[max_index].value == ',':  
@@ -100,18 +106,18 @@ def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
         is_valid_list = tokens_without_whitespace[0].type == TokenType.L_SQUARE
         is_valid_func = tokens_without_whitespace[0].type == TokenType.NAME and tokens_without_whitespace[1].type == TokenType.NAME
         if not is_valid_list and not is_valid_func:
-            raise InterpretationError(filename, tokens_without_whitespace[0].line, "Expected function call.")
+            raise_error_at_token(filename, code, "Expected function call. This is likely an issue of whitespace, as DreamBerd replaces parentheses with spaces and has significant whitespace.", tokens_without_whitespace[0])
         
         all_commas = []
         for i in range(len(updated_list)):
             if updated_list[i].value == ',':
-                if max_width == 0 or (tokens[i - 1].type == TokenType.WHITESPACE and len(tokens[i - 1].value)) == max_width:
+                if max_width == 0 or (tokens[i + 1].type == TokenType.WHITESPACE and len(tokens[i + 1].value)) == max_width:
                     all_commas.append(i)
         
         # now can split expressions within and then call the function
         if is_valid_func:
             return FunctionNode(tokens_without_whitespace[0].value, [
-                build_expression_tree(filename, t) for t in [
+                build_expression_tree(filename, t, code) for t in [
                     tokens[comma_index + 1:next_index] for comma_index, next_index in 
                     zip([int(tokens[0].type == TokenType.WHITESPACE), *all_commas], [*all_commas, len(tokens)])
                 ]
@@ -120,7 +126,7 @@ def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
             print(all_commas)
             print(tokens)
             return ListNode([
-                build_expression_tree(filename, t) for t in [
+                build_expression_tree(filename, t, code) for t in [
                     tokens[comma_index + 1:next_index] for comma_index, next_index in 
                     zip([int(tokens[0].type == TokenType.WHITESPACE), *all_commas], 
                         [*all_commas, len(tokens) - 1 - int(tokens[-1].type == TokenType.WHITESPACE)])  # adjusting here in order to avoid the bracket tokens
@@ -129,8 +135,8 @@ def build_expression_tree(filename: str, tokens: list[Token]) -> SyntaxTreeNode:
 
     else: 
         return ExpressionNode(
-            build_expression_tree(filename, tokens[:max_index]), 
-            build_expression_tree(filename, tokens[max_index + 1:]), 
+            build_expression_tree(filename, tokens[:max_index], code), 
+            build_expression_tree(filename, tokens[max_index + 1:], code), 
             operator=updated_list[max_index]
         )
 
