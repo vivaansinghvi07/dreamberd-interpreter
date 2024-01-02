@@ -1,8 +1,7 @@
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
-from typing import Optional
 
-from base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, VAR_DECL_KW, raise_error_at_line, raise_error_at_token
+from base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, VAR_DECL_KW, raise_error_at_token
 
 class ExpressionTreeNode(metaclass=ABCMeta):
     @abstractmethod
@@ -57,6 +56,7 @@ class Value(ExpressionTreeNode):
         return f"{'  ' * tabs}Value: {self.name_or_value}"
 
 def build_expression_tree(filename: str, tokens: list[Token], code: str) -> ExpressionTreeNode:
+    print(tokens)
     """ 
     This language has significant whitespace, so the biggest split happens where there is most space
      - func a, b  +  c becomes func(a, b) + c but func a, b+c  becomes func(a, b + c) 
@@ -172,6 +172,15 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         
         # now can split expressions within and then call the function
         if is_valid_func:
+            bracket_layers = 0
+            for i, token in enumerate(tokens):
+                if token.type == TokenType.L_SQUARE:
+                    bracket_layers += 1 
+                elif token.type == TokenType.R_SQUARE:
+                    bracket_layers -= 1
+                if bracket_layers != 0 and i in all_commas:
+                    return FunctionNode(tokens_without_whitespace[0].value, [build_expression_tree(filename, tokens[int(starts_with_whitespace) + 1:], code)])
+
             return FunctionNode(tokens_without_whitespace[0].value, [
                 build_expression_tree(filename, t, code) for t in [
                     tokens[comma_index + 1:next_index] for comma_index, next_index in 
