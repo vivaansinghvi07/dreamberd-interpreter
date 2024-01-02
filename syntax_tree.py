@@ -62,6 +62,9 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
      - func a, b  +  c becomes func(a, b) + c but func a, b+c  becomes func(a, b + c) 
      - a + func  b  ,  c + d is not legal because it translates to (a + func)(b, c + d)
      - 2 * 1+3 becomes 2 * (1 + 3)
+
+    TODO: might need to refactor this to not consider commas within brackets at all.
+          this way list parsing can be done within the "if max_width == -1" thing
     """
 
     for token in tokens:
@@ -216,6 +219,31 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
             build_expression_tree(filename, tokens[max_index + 1:], code), 
             operator=updated_list[max_index]
         )
+
+
+def split_into_statements(tokens: list[Token]) -> list[list[Token]]:
+    statements = [[]]
+    bracket_layers = 0
+    for token in tokens:
+
+        # check for expression-ending newlines
+        if token.type == TokenType.WHITESPACE and not statements[-1]:  # don't care about whitespace at the beginning or end of an expression, idk
+            continue
+        if token.type == TokenType.NEWLINE and not statements[-1] and len(statements) > 1:
+            statements[-2].append(token)
+        else:
+            statements[-1].append(token)
+
+        # this is the start of a new scope, we don't care about those for RN
+        if token.type == TokenType.L_CURLY:
+            bracket_layers += 1 
+        elif token.type == TokenType.R_CURLY:
+            bracket_layers -= 1 
+
+        if token.type in [TokenType.R_CURLY, TokenType.BANG, TokenType.QUESTION] and bracket_layers == 0:
+            statements.append([])
+
+    return statements
 
 def generate_syntax_tree(filename: str, tokens: list[Token]): 
     """ Split the code up into lines, which are then parsed and shit """
