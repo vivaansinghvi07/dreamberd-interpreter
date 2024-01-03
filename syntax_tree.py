@@ -86,7 +86,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
             bracket_layers += 1
         elif tokens[i].type == TokenType.R_SQUARE:
             bracket_layers -= 1
-        if isinstance(updated_list[i], OperatorType) and bracket_layers == 0 or updated_list[i] == OperatorType.COM and bracket_layers == 1:
+        if isinstance(updated_list[i], OperatorType) and bracket_layers == 0:
             try:
                 l_len, r_len = 0, 0
                 if tokens[i - 1].type == TokenType.WHITESPACE:
@@ -114,6 +114,8 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
 
     # there is no operator, must be just a value
     if max_index == -1:
+
+        # just making sure the input is correct
         try:
             name_or_value = tokens_without_whitespace[0]
             if name_or_value.type not in [TokenType.NAME, TokenType.L_SQUARE, TokenType.STRING]:
@@ -121,8 +123,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         except IndexError:
             raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0])
 
-        # detecting single element list (why??? nobody does this)
-        # okay we need to see when the list ends and consider that as the "list" we also need to check if this damn thing is being indexed
+        # this is a list :)
         if name_or_value.type == TokenType.L_SQUARE:
             bracket_layers = 1
             for i, token in enumerate(tokens_without_whitespace[1:], start=1):
@@ -131,9 +132,43 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                 elif token.type == TokenType.R_SQUARE:
                     bracket_layers -= 1
 
-                # this means there is no index because the closing is happening late
+                # this means the closing happens on the very end, signifying the end of the list
                 if bracket_layers == 0:
                     if i == len(tokens_without_whitespace) - 1:
+    
+                        # let's find the most significant comma, and split by that
+                        # if there's a function in the middle of the list, too bad :)
+                        # [func a, b]  == [func(a), b] and also [func(a, b)]  # literally how do i tell them apart
+
+                        # literally need to consider the width of whitespace from either side fr
+                        l_width = len(token.value) if (token := tokens[int(starts_with_whitespace) + 1]).type == TokenType.WHITESPACE else 0
+                        r_width = len(token.value) if (token := tokens[len(tokens) - int(ends_with_whitespace) - 2]).type == TokenType.WHITESPACE else 0
+                        if l_width != r_width:
+                            raise_error_at_token(filename, code, "Whitespace between either bracket of a list must be equal in length.",
+                                                 tokens[len(tokens) - int(ends_with_whitespace) - 2])
+
+                        # now go through all the commas and check if the whitespace is significant
+                        all_commas = []
+                        bracket_layers = 0  # yes i'm setting this damn thing twice 
+                        for i, (token, tok_or_op) in enumerate(zip(tokens, updated_list)):
+                            if token.type == TokenType.L_SQUARE:
+                                bracket_layers += 1 
+                            elif token.type == TokenType.R_SQUARE:
+                                bracket_layers -= 1
+                            if tok_or_op == OperatorType.COM and bracket_layers == 1:
+                                all_commas.append(i)
+
+                        # not single element
+                        if all_commas:
+                            return ListNode([
+                                build_expression_tree(filename, t, code) for t in [
+                                    tokens[comma_index + 1:next_index] for comma_index, next_index in 
+                                    zip([int(starts_with_whitespace), *all_commas], 
+                                        [*all_commas, len(tokens) - 1 - int(ends_with_whitespace)])  # adjusting here in order to avoid the bracket tokens
+                                ]
+                            ])
+                        
+                        # single element :)
                         return ListNode([build_expression_tree(filename, tokens[int(starts_with_whitespace) + 1 : len(tokens) - int(ends_with_whitespace) - 1], code)])
                     break
 
@@ -162,9 +197,8 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         # we need to find every other comma as they become the arguments of the function
         # additionally, there needs to be a spacing of equal length between the name of the function and the next argument
         
-        is_valid_list = tokens_without_whitespace[0].type == TokenType.L_SQUARE
-        is_valid_func = tokens_without_whitespace[0].type == TokenType.NAME and tokens_without_whitespace[1].type in [TokenType.NAME, TokenType.L_SQUARE, TokenType.STRING] 
-        if not is_valid_list and not is_valid_func:
+        if tokens_without_whitespace[0].type != TokenType.NAME or \
+           tokens_without_whitespace[1].type not in [TokenType.NAME, TokenType.L_SQUARE, TokenType.STRING]:
             raise_error_at_token(filename, code, "Expected function call. This is likely an issue of whitespace, as DreamBerd replaces parentheses with spaces and has significant whitespace.", tokens_without_whitespace[0])
         
         all_commas = []
@@ -173,45 +207,13 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                 if max_width == 0 or (tokens[i + 1].type == TokenType.WHITESPACE and len(tokens[i + 1].value)) == max_width:
                     all_commas.append(i)
         
-        # now can split expressions within and then call the function
-        if is_valid_func:
-            bracket_layers = 0
-            for i, token in enumerate(tokens):
-                if token.type == TokenType.L_SQUARE:
-                    bracket_layers += 1 
-                elif token.type == TokenType.R_SQUARE:
-                    bracket_layers -= 1
-                if bracket_layers != 0 and i in all_commas:
-                    return FunctionNode(tokens_without_whitespace[0].value, [build_expression_tree(filename, tokens[int(starts_with_whitespace) + 1:], code)])
-
-            return FunctionNode(tokens_without_whitespace[0].value, [
-                build_expression_tree(filename, t, code) for t in [
-                    tokens[comma_index + 1:next_index] for comma_index, next_index in 
-                    zip([int(starts_with_whitespace), *all_commas], [*all_commas, len(tokens)])
-                ]
-            ])
-        elif is_valid_list:
-
-            bracket_layers = -1
-            end_index = len(tokens) - int(ends_with_whitespace) - 1
-            for i, token in reversed(list(enumerate(tokens[:end_index]))):  # i don't like this one bit  :(
-                if token.type == TokenType.L_SQUARE:
-                    bracket_layers += 1 
-                elif token.type == TokenType.R_SQUARE:
-                    bracket_layers -= 1
-
-                # first index!!!!!!!!!!!!!!!!!!!!
-                if bracket_layers == 0 and i > int(starts_with_whitespace):
-                    return IndexNode(build_expression_tree(filename, tokens[int(starts_with_whitespace) : i], code),
-                                     build_expression_tree(filename, tokens[i + 1 : end_index], code))
-
-            return ListNode([
-                build_expression_tree(filename, t, code) for t in [
-                    tokens[comma_index + 1:next_index] for comma_index, next_index in 
-                    zip([int(starts_with_whitespace), *all_commas], 
-                        [*all_commas, len(tokens) - 1 - int(ends_with_whitespace)])  # adjusting here in order to avoid the bracket tokens
-                ]
-            ])
+        # i have no idea what the hell im doin
+        return FunctionNode(tokens_without_whitespace[0].value, [
+            build_expression_tree(filename, t, code) for t in [
+                tokens[comma_index + 1:next_index] for comma_index, next_index in 
+                zip([int(starts_with_whitespace), *all_commas], [*all_commas, len(tokens)])
+            ]
+        ])
 
     else: 
         return ExpressionNode(
