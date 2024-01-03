@@ -56,16 +56,15 @@ class Value(ExpressionTreeNode):
         return f"{'  ' * tabs}Value: {self.name_or_value}"
 
 def build_expression_tree(filename: str, tokens: list[Token], code: str) -> ExpressionTreeNode:
-    print(tokens)
     """ 
     This language has significant whitespace, so the biggest split happens where there is most space
      - func a, b  +  c becomes func(a, b) + c but func a, b+c  becomes func(a, b + c) 
      - a + func  b  ,  c + d is not legal because it translates to (a + func)(b, c + d)
      - 2 * 1+3 becomes 2 * (1 + 3)
-
-    TODO: might need to refactor this to not consider commas within brackets at all.
-          this way list parsing can be done within the "if max_width == -1" thing
     """
+
+    if not tokens:
+        raise InterpretationError("\033[31mSomething went wrong, I don't know what so figure it out :)\033[32m")
 
     for token in tokens:
         if token.type == TokenType.WHITESPACE and '\t' in token.value:
@@ -132,7 +131,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                 elif token.type == TokenType.R_SQUARE:
                     bracket_layers -= 1
 
-                # this means the closing happens on the very end, signifying the end of the list
+                # this means the closing happen, signifying the end of the list
                 if bracket_layers == 0:
                     if i == len(tokens_without_whitespace) - 1:
     
@@ -150,12 +149,14 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                         # now go through all the commas and check if the whitespace is significant
                         all_commas = []
                         bracket_layers = 0  # yes i'm setting this damn thing twice 
-                        for i, (token, tok_or_op) in enumerate(zip(tokens, updated_list)):
+                        for i, (token, tok_or_op) in enumerate(zip(tokens[:-1], updated_list)):  # stop here to avoid angry errors
                             if token.type == TokenType.L_SQUARE:
                                 bracket_layers += 1 
                             elif token.type == TokenType.R_SQUARE:
                                 bracket_layers -= 1
-                            if tok_or_op == OperatorType.COM and bracket_layers == 1:
+                            if tok_or_op == OperatorType.COM and bracket_layers == 1 and (
+                                l_width == 0 or l_width == len(tokens[i + 1].value) and tokens[i + 1].type == TokenType.WHITESPACE
+                            ):
                                 all_commas.append(i)
 
                         # not single element
