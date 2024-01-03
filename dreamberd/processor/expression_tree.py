@@ -1,5 +1,5 @@
 from __future__ import annotations
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, update_abstractmethods
 
 from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, VAR_DECL_KW, raise_error_at_token
 
@@ -7,6 +7,17 @@ class ExpressionTreeNode(metaclass=ABCMeta):
     @abstractmethod
     def to_string(self, tabs: int = 0) -> str: pass
 
+# things like the not operator
+class SingleOperatorNode(ExpressionTreeNode):
+    def __init__(self, expression: ExpressionTreeNode, operator: str) -> None:
+        self.expression = expression
+        self.operator = operator
+    def to_string(self, tabs: int = 0) -> str:
+        return f"{'  ' * tabs}Single Operator: \n" + \
+               f"{'  ' * (tabs + 1)}Operator: {self.operator}\n" + \
+               f"{'  ' * (tabs + 1)}Expression: \n" + \
+               f"{self.expression.to_string(tabs + 2)}"
+        
 class ListNode(ExpressionTreeNode):
     def __init__(self, values: list[ExpressionTreeNode]):
         self.values = values
@@ -56,6 +67,7 @@ class Value(ExpressionTreeNode):
         return f"{'  ' * tabs}Value: {self.name_or_value}"
 
 def build_expression_tree(filename: str, tokens: list[Token], code: str) -> ExpressionTreeNode:
+    print(tokens)
     """ 
     This language has significant whitespace, so the biggest split happens where there is most space
      - func a, b  +  c becomes func(a, b) + c but func a, b+c  becomes func(a, b + c) 
@@ -87,6 +99,13 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
             bracket_layers -= 1
         if isinstance(updated_list[i], OperatorType) and bracket_layers == 0:
             try:
+
+                # first check for negative sign -- this is horrible :D 
+                if i == 0 or tokens[i - 1].type == TokenType.WHITESPACE and \
+                   tokens[i + 1].type != TokenType.WHITESPACE and updated_list[i] == OperatorType.SUB:  # l_len greater than zero no matter what fr
+                    continue
+
+                # make sure whitespace is equal and then determine maxes
                 l_len, r_len = 0, 0
                 if tokens[i - 1].type == TokenType.WHITESPACE:
                     l_len = len(tokens[i - 1].value)
@@ -97,21 +116,30 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                 if r_len >= max_width:
                     max_width = r_len
                     max_index = i
+
             except IndexError:
                 raise_error_at_token(filename, code, "Operator cannot be at the end of an expression.", tokens[i])
 
     # detecting single argument function
     # this doesn't seem to adhere to my standards 100%, so its not a bug, its a feature
-    first_name_index = int(starts_with_whitespace)
+    starts_with_operator = int(tokens_without_whitespace[0].type in {TokenType.SEMICOLON, TokenType.SUBTRACT})
+    first_name_index = int(starts_with_whitespace) + int(starts_with_operator)
     if len(tokens) >= 3 + first_name_index and \
        tokens[first_name_index].type == TokenType.NAME and \
        tokens[first_name_index + 1].type == TokenType.WHITESPACE and \
-       tokens[first_name_index + 2].type in [TokenType.NAME, TokenType.L_SQUARE, TokenType.STRING] and \
+       tokens[first_name_index + 2].type in [TokenType.NAME, TokenType.L_SQUARE, TokenType.STRING, TokenType.SUBTRACT, TokenType.SEMICOLON] and \
        len(tokens[first_name_index + 1].value) > max_width:
-        return FunctionNode(tokens[first_name_index].value,
-                            [build_expression_tree(filename, tokens[first_name_index + 1:], code)])
+        function_node = FunctionNode(tokens[first_name_index].value,
+                                     [build_expression_tree(filename, tokens[first_name_index + 1:], code)])
+        if starts_with_operator:
+            return SingleOperatorNode(function_node, tokens_without_whitespace[0].value)
+        return function_node
 
     # there is no operator, must be just a value
+    if (max_index == -1 or updated_list[max_index] == OperatorType.COM) and starts_with_operator:
+        return SingleOperatorNode(build_expression_tree(filename, tokens[int(starts_with_whitespace) + 1:], code), tokens_without_whitespace[0].value)
+
+    # value, like a list, name, or anything else
     if max_index == -1:
 
         # just making sure the input is correct
@@ -139,7 +167,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                         # if there's a function in the middle of the list, too bad :)
                         # [func a, b]  == [func(a), b] and also [func(a, b)]  # literally how do i tell them apart
 
-                        # literally need to consider the width of whitespace from either side fr
+                        # need to consider the width of whitespace from either side fr
                         l_width = len(token.value) if (token := tokens[int(starts_with_whitespace) + 1]).type == TokenType.WHITESPACE else 0
                         r_width = len(token.value) if (token := tokens[len(tokens) - int(ends_with_whitespace) - 2]).type == TokenType.WHITESPACE else 0
                         if l_width != r_width:
@@ -190,10 +218,11 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                     return IndexNode(build_expression_tree(filename, tokens[int(starts_with_whitespace) : i], code),
                                      build_expression_tree(filename, tokens[i + 1 : end_index], code))
                     
+        # finally end this vicious cycle
         return Value(name_or_value)
         
     # max_index is the token with the maximum surrouding whitespace 
-    if updated_list[max_index].value == ',':  
+    if updated_list[max_index] == OperatorType.COM:  
         # this means it is a function
         # we need to find every other comma as they become the arguments of the function
         # additionally, there needs to be a spacing of equal length between the name of the function and the next argument
