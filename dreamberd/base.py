@@ -79,11 +79,11 @@ STR_TO_OPERATOR = {op.value: op for op in OperatorType}
 # why do i even need a damn class for this 
 @dataclass
 class Token():
-    def __init__(self, type: TokenType, value: str, line: int, col: int) -> None:
-        self.type = type
-        self.value = value
-        self.line = line 
-        self.col = col
+
+    type: TokenType
+    value: str 
+    line: int
+    col: int
+
     def __repr__(self) -> str:
         return f"Token({self.type}, {repr(self.value)})"
-
