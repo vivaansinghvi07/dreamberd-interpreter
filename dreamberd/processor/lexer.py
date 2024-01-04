@@ -24,7 +24,15 @@ def tokenize(filename: str, code: str) -> list[Token]:
             case '[': add_to_tokens(tokens, line_count, curr - start, TokenType.L_SQUARE)
             case ']': add_to_tokens(tokens, line_count, curr - start, TokenType.R_SQUARE)
             case '.': add_to_tokens(tokens, line_count, curr - start, TokenType.DOT)
-            case ';': add_to_tokens(tokens, line_count, curr - start, TokenType.SEMICOLON)
+            case ';': 
+                value = ';'
+                while code[curr + 1] == '=':
+                    value += '='
+                    curr += 1
+                if len(value) == 1:
+                    add_to_tokens(tokens, line_count, curr - start, TokenType.SEMICOLON)
+                else:
+                    add_to_tokens(tokens, line_count, curr - start, TokenType.NOT_EQUAL, value)
             case ',': add_to_tokens(tokens, line_count, curr - start, TokenType.COMMA)
             case '+': 
                 if code[curr + 1] == '+':
@@ -94,7 +102,7 @@ def tokenize(filename: str, code: str) -> list[Token]:
                 curr -= 1
                 add_to_tokens(tokens, line_count, curr - start, TokenType.STRING, value)
             case ' ' | '\t' | '(' | ')':
-                value = code[curr]
+                value = code[curr] if code[curr] not in '()' else ' '
                 while curr + 1 < len(code) and code[curr + 1] in ' ()\t':
                     curr += 1
                     value += code[curr] if code[curr] not in '()' else ' '

@@ -78,7 +78,8 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
     if not tokens:
         raise InterpretationError("\033[31mSomething went wrong, I don't know what so figure it out :)\033[32m")
 
-    for token in tokens:
+    # tabs at the beginning or end do not matter
+    for token in tokens[1:-1]:
         if token.type == TokenType.WHITESPACE and '\t' in token.value:
             raise_error_at_token(filename, code, "Tabs are not allowed in expressions.", token)
     

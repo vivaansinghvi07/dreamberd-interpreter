@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 from dataclasses import dataclass
 
-ALPH_NUMS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_')
+ALPH_NUMS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.')
 VAR_DECL_KW = {'const', 'var'}
 
 class InterpretationError(Exception):
@@ -51,6 +51,7 @@ class TokenType(Enum):
     GREATER_THAN = '>'
     LESS_EQUAL = '<='
     GREATER_EQUAL = '>='
+    NOT_EQUAL = ';='  #!@#!@#!@#
 
     WHITESPACE = '       '
     NAME = 'abcaosdijawef'  # i'm losing my mind
@@ -73,6 +74,13 @@ class OperatorType(Enum):
     OR  = '||'
     AND = '&&'
     COM = ','  # this is just here to seperate variables in a function 
+    E   = '='
+    EE  = '=='
+    EEE = '==='
+    EEEE= '===='
+    NE  = ';='
+    NEE = ';=='
+    NEEE= ';==='
 
 STR_TO_OPERATOR = {op.value: op for op in OperatorType}
 
