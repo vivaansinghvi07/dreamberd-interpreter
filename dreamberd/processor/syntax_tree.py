@@ -1,9 +1,8 @@
 from abc import ABCMeta
+from typing import Optional
 from dataclasses import dataclass
-from typing import Optional, final
 
 from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, raise_error_at_token
-from dreamberd.processor.expression_tree import ExpressionTreeNode, build_expression_tree
 
 class CodeStatement(metaclass=ABCMeta):
     pass
@@ -33,7 +32,9 @@ class VariableAssignment(CodeStatement):
     name: str
     modifiers: list[str]
     lifetime: Optional[str]
-    expression: ExpressionTreeNode
+    expression: list[Token]
+    debug: bool
+    confidence: int  ## amount of !!! after the decl for priority
 
 # name expression { 
 # since an expression can be a name:
@@ -42,26 +43,28 @@ class VariableAssignment(CodeStatement):
 @dataclass
 class Conditional(CodeStatement):
     keyword: str
-    condition: ExpressionTreeNode
+    condition: list[Token]
     code: list[tuple[CodeStatement, ...]]
 
 # name expression !?
 @dataclass
 class ReturnStatement(CodeStatement):
     keyword: str
-    expression: ExpressionTreeNode
+    expression: list[Token]
+    debug: bool
 
 # expression !?   < virtually indistinguishable from a return statement from a parsing perspective
 @dataclass
 class ExpressionStatement(CodeStatement):
-    expression: ExpressionTreeNode
+    expression: list[Token]
+    debug: bool
 
 # name name = expression { 
 @dataclass
 class WhenStatement(CodeStatement):
     keyword: str
     name: str 
-    expression: ExpressionTreeNode
+    expression: list[Token]
     code: list[tuple[CodeStatement, ...]]
 
 # idea: create a class that evaluates at runtime what a statement is, so then execute it 
@@ -92,9 +95,9 @@ def split_into_statements(tokens: list[Token]) -> list[list[Token]]:
     # remove stray newlines cause they are annoying and shit, also remove empty tings
     final_statements = []
     for statement in statements:
-        while statement[-1].type in {TokenType.WHITESPACE, TokenType.NEWLINE}:  ## NOTE: END WILL NEVER BE WHITESPACE
+        while statement and statement[-1].type in {TokenType.WHITESPACE, TokenType.NEWLINE}:  ## NOTE: END WILL NEVER BE WHITESPACE
             statement.pop()
-        while statement[0].type in {TokenType.WHITESPACE, TokenType.NEWLINE}:  ## NOTE: NOW START WILL NEVER BE WHITESPACE EITHER
+        while statement and statement[0].type in {TokenType.WHITESPACE, TokenType.NEWLINE}:  ## NOTE: NOW START WILL NEVER BE WHITESPACE EITHER
             statement.pop(0)
         if not statement:
             continue
@@ -151,12 +154,12 @@ def remove_type_hints(filename: str, code: str, statements: list[list[Token]]) -
 
 def assert_proper_indentation(filename: str, tokens: list[Token], code: str) -> None:
     looking_for_whitespace = False
-    for t in reversed(tokens):
+    for t in tokens:
         if not looking_for_whitespace:
             if t.type == TokenType.NEWLINE:
                 looking_for_whitespace = True
         else:
-            if t.type == TokenType.WHITESPACE and len(t.value.replace('\t', '  ')):
+            if t.type == TokenType.WHITESPACE and len(t.value.replace('\t', '  ')) % 3:
                 raise_error_at_token(filename, code, "Invalid indenting detected (must be a multiple of 3). Tabs count as 2 spaces.", t)
             looking_for_whitespace = False
 
@@ -231,7 +234,7 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
 
     # at this point, this can be the "when" keyword, a class dec, a function call, or an if statement
     scope_open_index = [t.type == TokenType.L_CURLY for t in tokens].index(True)
-    stuff_inside_scope = tokens[scope_open_index : len(tokens) - ends_with_punc - 1]
+    stuff_inside_scope = tokens[scope_open_index + 1 : len(tokens) - ends_with_punc - 1]
     statements_inside_scope = generate_syntax_tree(filename, stuff_inside_scope, code)
     
     # see the function pointer -> immediately know
@@ -264,7 +267,7 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
                 when_keywords.append(t.value)
             curr += 1
         keyword, name = when_keywords
-        expression = build_expression_tree(filename, tokens[curr - 1 : scope_open_index], code)
+        expression = tokens[curr - 1 : scope_open_index]
 
         return WhenStatement(
             keyword = keyword,
@@ -286,7 +289,7 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
             code = statements_inside_scope
         ), Conditional(
             keyword = without_whitespace[0].value,
-            condition = build_expression_tree(filename, without_whitespace[1:], code),
+            condition = without_whitespace[1:],
             code = statements_inside_scope
         )
 
@@ -294,18 +297,22 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
 
         return Conditional(
             keyword = without_whitespace[0].value,
-            condition = build_expression_tree(filename, tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index], code),
+            condition = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
             code = statements_inside_scope
         ),
 
 def create_unscoped_code_statement(filename: str, tokens: list[Token], without_whitespace: list[Token], code: str) -> tuple[CodeStatement, ...]: 
     
+    is_debug = tokens[-1].type == TokenType.QUESTION
+    confidence = 0 if is_debug else len(tokens[-1].value)
+
     # it's a function!!!!!!!!!!!!!!!!!
     if any(l := [t.type == TokenType.FUNC_POINT for t in tokens]):
         func_point_index = l.index(True)
         return create_function_definition(filename, without_whitespace, code, [(ReturnStatement(
             keyword = "",
-            expression = build_expression_tree(filename, tokens[func_point_index + 1 : -1], code)
+            expression = tokens[func_point_index + 1 : -1],
+            debug = is_debug
         ),)])
     
     # let's see what can be what D:
@@ -330,18 +337,21 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
     can_be_var_declaration &= 3 <= len(names_in_row) <= 4
     
     # make a list of all possible things, starting with plain expression 
-    possibilities: list[CodeStatement] = [ExpressionStatement(build_expression_tree(filename, tokens, code))] 
+    possibilities: list[CodeStatement] = [ExpressionStatement(tokens[:-1], is_debug)] 
     if can_be_return:
         possibilities.append(ReturnStatement(
             keyword = without_whitespace[0].value,   # should be the same as tokens[0].value but this makes me feel safe
-            expression = build_expression_tree(filename, tokens[1:], code)
+            expression = tokens[1:],
+            debug = is_debug
         ))
     if can_be_var_declaration:
         possibilities.append(VariableAssignment(
             name = names_in_row[-1],
             modifiers = names_in_row[:-1],
             lifetime = lifetime, 
-            expression = build_expression_tree(filename, tokens[l.index(True) + 1 : -1], code)   # the end should be a puncutation
+            expression = tokens[l.index(True) + 1 : -1],   # the end should be a puncutation
+            debug = is_debug, 
+            confidence = confidence
         ))
     return tuple(possibilities)
 
