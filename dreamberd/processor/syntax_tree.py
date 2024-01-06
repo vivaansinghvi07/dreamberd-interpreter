@@ -2,7 +2,7 @@ from abc import ABCMeta
 from typing import Optional
 from dataclasses import dataclass
 
-from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, raise_error_at_token
+from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, raise_error_at_line, raise_error_at_token
 
 class CodeStatement(metaclass=ABCMeta):
     pass
@@ -371,17 +371,24 @@ def generate_syntax_tree(filename: str, tokens: list[Token], code: str) -> list[
 
         without_whitespace = [t for t in tokens if t.type != TokenType.WHITESPACE]
 
-        # contains an open scope :)
-        if any(t.type == TokenType.L_CURLY for t in tokens):
-            final_statements.append(create_scoped_code_statement(
-                filename, tokens, without_whitespace, code
-            ))
+        try:
+            # contains an open scope :)
+            if any(t.type == TokenType.L_CURLY for t in tokens):
+                final_statements.append(create_scoped_code_statement(
+                    filename, tokens, without_whitespace, code
+                ))
 
-        else:  # options here are plain expression, variable assignment, return, or simple one-liner funciton expression
+            else:  # options here are plain expression, variable assignment, return, or simple one-liner funciton expression
+                final_statements.append(create_unscoped_code_statement(
+                    filename, tokens, without_whitespace, code
+                ))
             
-            final_statements.append(create_unscoped_code_statement(
-                filename, tokens, without_whitespace, code
-            ))
-
+            # exit if some possiblity was found 
+            if final_statements[-1]:
+                continue
+        except IndexError:  # i have no idea what kind of errors are going to be rasied here
+            pass
+        raise_error_at_line(filename, code, without_whitespace[0].line, "Error parsing statement. I have no idea what went wrong, double check it and try again.")
+        
     return final_statements
             
