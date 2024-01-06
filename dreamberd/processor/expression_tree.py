@@ -1,7 +1,7 @@
 from __future__ import annotations
-from abc import ABCMeta, abstractmethod, update_abstractmethods
+from abc import ABCMeta, abstractmethod
 
-from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, VAR_DECL_KW, raise_error_at_token
+from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, raise_error_at_token
 
 class ExpressionTreeNode(metaclass=ABCMeta):
     @abstractmethod
@@ -82,6 +82,8 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
     for token in tokens[1:-1]:
         if token.type == TokenType.WHITESPACE and '\t' in token.value:
             raise_error_at_token(filename, code, "Tabs are not allowed in expressions.", token)
+        elif token.type == TokenType.NEWLINE:
+            raise_error_at_token(filename, code, "Due to the laws of significant whitespace, no newline characters are permitted in expressions. If your code is so long that it needs newlines, consider rewriting it :)", token)
     
     # create a new list consisting and tokens and a brand new type: the list 
     tokens_without_whitespace = [token for token in tokens if token.type != TokenType.WHITESPACE]

@@ -24,6 +24,7 @@ def tokenize(filename: str, code: str) -> list[Token]:
             case '[': add_to_tokens(tokens, line_count, curr - start, TokenType.L_SQUARE)
             case ']': add_to_tokens(tokens, line_count, curr - start, TokenType.R_SQUARE)
             case '.': add_to_tokens(tokens, line_count, curr - start, TokenType.DOT)
+            case ':': add_to_tokens(tokens, line_count, curr - start, TokenType.COLON)
             case ';': 
                 value = ';'
                 while code[curr + 1] == '=':
