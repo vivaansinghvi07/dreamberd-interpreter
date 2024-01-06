@@ -321,6 +321,8 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
     lifetime = None
     looking_for_lifetime, can_be_var_declaration = False, any(l := [t.type == TokenType.EQUAL and t.value == '=' for t in tokens]) 
     for t in without_whitespace:
+        if not can_be_var_declaration:
+            break
         if not looking_for_lifetime:
             if t.type != TokenType.NAME:
                 if t.type == TokenType.LESS_THAN:
@@ -334,7 +336,7 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             if not lifetime:
                 lifetime = t.value 
     
-    can_be_var_declaration &= 3 <= len(names_in_row) <= 4
+    can_be_var_declaration &= 3 <= len(names_in_row) <= 4 or len(names_in_row) == 1
     
     # make a list of all possible things, starting with plain expression 
     possibilities: list[CodeStatement] = [ExpressionStatement(tokens[:-1], is_debug)] 
