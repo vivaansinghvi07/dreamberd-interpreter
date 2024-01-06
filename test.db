@@ -1,6 +1,6 @@
-const const pi = 4.15 - 1+0.01!
+const const pi: List[Digit, Digit, Digit] = 314!
 println("Hello world")!
-const const name = James???
+   const const name = James?
 if (name ;== "james") {
-  print(':(')
+   print(':(')
 }

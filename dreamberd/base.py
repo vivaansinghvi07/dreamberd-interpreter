@@ -41,6 +41,7 @@ class TokenType(Enum):
     SUBTRACT = '-'
 
     COMMA = ','
+    COLON = ':'
     SEMICOLON = ';'
     BANG = '!'
     QUESTION = '?'
