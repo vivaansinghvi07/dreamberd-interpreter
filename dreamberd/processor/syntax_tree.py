@@ -28,13 +28,21 @@ class ClassDeclaration(CodeStatement):
 # : ... can be ignored
 # name name name: ... = something!?
 @dataclass
-class VariableAssignment(CodeStatement):
+class VariableDeclaration(CodeStatement):
     name: str
     modifiers: list[str]
     lifetime: Optional[str]
     expression: list[Token]
     debug: bool
     confidence: int  ## amount of !!! after the decl for priority
+
+# name []? = ...!
+@dataclass 
+class VariableAssignment(CodeStatement):
+    name: str
+    expression: list[Token]
+    debug: bool 
+    index: Optional[list[list[Token]]]  # list[Token] here is an expression not evaled yet
 
 # name expression { 
 # since an expression can be a name:
@@ -51,6 +59,11 @@ class Conditional(CodeStatement):
 class ReturnStatement(CodeStatement):
     keyword: str
     expression: list[Token]
+    debug: bool
+@dataclass
+class DeleteStatement(CodeStatement):
+    keyword: str
+    name: str
     debug: bool
 
 # expression !?   < virtually indistinguishable from a return statement from a parsing perspective
@@ -314,15 +327,50 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             expression = tokens[func_point_index + 1 : -1],
             debug = is_debug
         ),)])
+
     
     # let's see what can be what D:
     can_be_return = without_whitespace[0].type == TokenType.NAME
-    names_in_row = []
-    lifetime = None
-    looking_for_lifetime, can_be_var_declaration = False, any(l := [t.type == TokenType.EQUAL and t.value == '=' for t in tokens]) 
-    for t in without_whitespace:
-        if not can_be_var_declaration:
+    can_be_delete = can_be_return and len(without_whitespace) == 3 and \
+                    without_whitespace[1].type == TokenType.NAME and without_whitespace[2].type in {TokenType.BANG, TokenType.QUESTION}
+    
+    contains_equals = any(tokens_is_equal := [t.type == TokenType.EQUAL and t.value == '=' for t in tokens]) 
+    can_be_var_assignment = can_be_var_declaration = contains_equals    
+
+    # checking for single name and index for variable assignment 
+    can_be_var_assignment &= len(without_whitespace) >= 4 and without_whitespace[0].type == TokenType.NAME and \
+                             without_whitespace[1].type in {TokenType.EQUAL, TokenType.L_SQUARE}
+    var_assignment_index = [[]]   # is list[list] to handle multiple indexes
+    bracket_layers, add_to_var_assignment_index = 0, False
+    for t in tokens:
+
+        if not can_be_var_assignment:
             break
+
+        if t.type == TokenType.L_SQUARE:
+            if bracket_layers == 0:
+                add_to_var_assignment_index = True
+            bracket_layers += 1
+            continue
+        elif t.type == TokenType.R_SQUARE:
+            bracket_layers -= 1
+            if bracket_layers == 0:
+                add_to_var_assignment_index = False
+                var_assignment_index += []
+            continue
+        elif bracket_layers == 0 and t.type == TokenType.EQUAL:  # exit when hitting the equals
+            break
+
+        if add_to_var_assignment_index:
+            var_assignment_index[-1].append(t)
+    var_assignment_index.pop()  # the last one will always be empty
+
+    # checking modifiers and lifetime for varianle declaration
+    names_in_row = []
+    looking_for_lifetime, lifetime = False, None
+    for t in without_whitespace:
+        if not can_be_var_declaration or can_be_var_assignment:  # var assignment has a single name, therefore counteracts being decl
+            break 
         if not looking_for_lifetime:
             if t.type != TokenType.NAME:
                 if t.type == TokenType.LESS_THAN:
@@ -336,24 +384,37 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             if not lifetime:
                 lifetime = t.value 
     
-    can_be_var_declaration &= 3 <= len(names_in_row) <= 4 or len(names_in_row) == 1
+    can_be_var_declaration &= 3 <= len(names_in_row) <= 4
     
     # make a list of all possible things, starting with plain expression 
     possibilities: list[CodeStatement] = [ExpressionStatement(tokens[:-1], is_debug)] 
     if can_be_return:
         possibilities.append(ReturnStatement(
             keyword = without_whitespace[0].value,   # should be the same as tokens[0].value but this makes me feel safe
-            expression = tokens[1:],
+            expression = tokens[1:-1],
+            debug = is_debug
+        ))
+    if can_be_delete:
+        possibilities.append(DeleteStatement(
+            keyword = without_whitespace[0].value,
+            name = without_whitespace[1].value,
             debug = is_debug
         ))
     if can_be_var_declaration:
-        possibilities.append(VariableAssignment(
+        possibilities.append(VariableDeclaration(
             name = names_in_row[-1],
             modifiers = names_in_row[:-1],
             lifetime = lifetime, 
-            expression = tokens[l.index(True) + 1 : -1],   # the end should be a puncutation
+            expression = tokens[tokens_is_equal.index(True) + 1 : -1],   # the end should be a puncutation
             debug = is_debug, 
             confidence = confidence
+        ))
+    if can_be_var_assignment:
+        possibilities.append(VariableAssignment(
+            name = without_whitespace[0].value,
+            expression = tokens[tokens_is_equal.index(True) + 1 : -1],
+            debug = is_debug, 
+            index = var_assignment_index or None
         ))
     return tuple(possibilities)
 
