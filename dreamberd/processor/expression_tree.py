@@ -60,7 +60,7 @@ class IndexNode(ExpressionTreeNode):
                f"{'  ' * (tabs + 1)}At: \n" + \
                f"{self.index.to_string(tabs + 2)}"
 
-class Value(ExpressionTreeNode):
+class ValueNode(ExpressionTreeNode):
     def __init__(self, name_or_value: Token): 
         self.name_or_value = name_or_value
     def to_string(self, tabs: int = 0) -> str:
@@ -222,7 +222,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                                      build_expression_tree(filename, tokens[i + 1 : end_index], code))
                     
         # finally end this vicious cycle
-        return Value(name_or_value)
+        return ValueNode(name_or_value)
         
     # max_index is the token with the maximum surrouding whitespace 
     if updated_list[max_index] == OperatorType.COM:  
