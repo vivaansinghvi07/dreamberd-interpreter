@@ -80,6 +80,13 @@ class WhenStatement(CodeStatement):
     expression: list[Token]
     code: list[tuple[CodeStatement, ...]]
 
+# name "string" expression
+@dataclass 
+class AfterStatement(CodeStatement):
+    keyword: str
+    event: str 
+    expression: list[Token]
+
 # idea: create a class that evaluates at runtime what a statement is, so then execute it 
 def split_into_statements(tokens: list[Token]) -> list[list[Token]]:
     statements = [[]]
@@ -452,4 +459,3 @@ def generate_syntax_tree(filename: str, tokens: list[Token], code: str) -> list[
         raise_error_at_line(filename, code, without_whitespace[0].line, "Error parsing statement. I have no idea what went wrong, double check it and try again.")
         
     return final_statements
-            
