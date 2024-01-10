@@ -40,7 +40,7 @@ class ExpressionNode(ExpressionTreeNode):
                f"{self.right.to_string(tabs + 2)}"
 
 class FunctionNode(ExpressionTreeNode):
-    def __init__(self, name: str, args: list[ExpressionTreeNode]):
+    def __init__(self, name: Token, args: list[ExpressionTreeNode]):
         self.name = name 
         self.args = args
     def to_string(self, tabs: int = 0) -> str:
@@ -67,11 +67,10 @@ class ValueNode(ExpressionTreeNode):
         return f"{'  ' * tabs}Value: {self.name_or_value}"
 
 def build_expression_tree(filename: str, tokens: list[Token], code: str) -> ExpressionTreeNode:
-    print(tokens)
     """ 
     This language has significant whitespace, so the biggest split happens where there is most space
      - func a, b  +  c becomes func(a, b) + c but func a, b+c  becomes func(a, b + c) 
-     - a + func  b  ,  c + d is not legal because it translates to (a + func)(b, c + d)
+     - a + func   b  ,  c + d is not legal because it translates to (a + func)(b, c + d)
      - 2 * 1+3 becomes 2 * (1 + 3)
     """
 
@@ -132,7 +131,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
        tokens[first_name_index + 1].type == TokenType.WHITESPACE and \
        tokens[first_name_index + 2].type in [TokenType.NAME, TokenType.L_SQUARE, TokenType.STRING, TokenType.SUBTRACT, TokenType.SEMICOLON] and \
        len(tokens[first_name_index + 1].value) > max_width:
-        function_node = FunctionNode(tokens[first_name_index].value,
+        function_node = FunctionNode(tokens[first_name_index],
                                      [build_expression_tree(filename, tokens[first_name_index + 1:], code)])
         if starts_with_operator:
             return SingleOperatorNode(function_node, tokens_without_whitespace[0].value)
@@ -241,7 +240,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
                     all_commas.append(i)
         
         # i have no idea what the hell im doin
-        return FunctionNode(tokens_without_whitespace[0].value, [
+        return FunctionNode(tokens_without_whitespace[0], [
             build_expression_tree(filename, t, code) for t in [
                 tokens[comma_index + 1:next_index] for comma_index, next_index in 
                 zip([int(starts_with_whitespace), *all_commas], [*all_commas, len(tokens)])

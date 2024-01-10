@@ -5,7 +5,6 @@ from enum import Enum
 from dataclasses import dataclass
 
 ALPH_NUMS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.')
-VAR_DECL_KW = {'const', 'var'}
 
 class InterpretationError(Exception):
     _           :(                                                                                              str)  # this is why i am the greatest programmer to ever live

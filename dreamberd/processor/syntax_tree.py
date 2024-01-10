@@ -80,12 +80,13 @@ class WhenStatement(CodeStatement):
     expression: list[Token]
     code: list[tuple[CodeStatement, ...]]
 
-# name "string" expression
+# name "string" expression!
 @dataclass 
 class AfterStatement(CodeStatement):
     keyword: str
     event: str 
     expression: list[Token]
+    is_debug: bool
 
 # idea: create a class that evaluates at runtime what a statement is, so then execute it 
 def split_into_statements(tokens: list[Token]) -> list[list[Token]]:
@@ -372,6 +373,10 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             var_assignment_index[-1].append(t)
     var_assignment_index.pop()  # the last one will always be empty
 
+    # check for the "after" statement 
+    can_be_after = without_whitespace[0].type == TokenType.NAME and \
+                   without_whitespace[1].type in {TokenType.STRING, TokenType.NAME}
+
     # checking modifiers and lifetime for varianle declaration
     names_in_row = []
     looking_for_lifetime, lifetime = False, None
@@ -423,8 +428,14 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             debug = is_debug, 
             index = var_assignment_index or None
         ))
+    if can_be_after:
+        possibilities.append(AfterStatement(
+            keyword = without_whitespace[0].value,
+            event = without_whitespace[1].value,
+            expression = tokens[tokens.index(without_whitespace[1]) + 1 : -1],
+            is_debug = is_debug
+        ))
     return tuple(possibilities)
-
 
 def generate_syntax_tree(filename: str, tokens: list[Token], code: str) -> list[tuple[CodeStatement, ...]]: 
     """ Split the code up into lines, which are then parsed and shit """
