@@ -27,10 +27,11 @@ class ListNode(ExpressionTreeNode):
                "\n".join([f"{v.to_string(tabs + 2)}" for v in self.values])
 
 class ExpressionNode(ExpressionTreeNode):
-    def __init__(self, left: ExpressionTreeNode, right: ExpressionTreeNode, operator: OperatorType):
+    def __init__(self, left: ExpressionTreeNode, right: ExpressionTreeNode, operator: OperatorType, operator_token: Token):
         self.left = left 
         self.right = right
         self.operator = operator
+        self.operator_token = operator_token
     def to_string(self, tabs: int = 0) -> str:
         return f"{'  ' * tabs}Expression: \n" + \
                f"{'  ' * (tabs + 1)}Operator: {self.operator}\n" + \
@@ -251,6 +252,6 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         return ExpressionNode(
             build_expression_tree(filename, tokens[:max_index], code), 
             build_expression_tree(filename, tokens[max_index + 1:], code), 
-            operator=updated_list[max_index]
+            operator=updated_list[max_index],
+            operator_token=tokens[max_index]
         )
-
