@@ -51,7 +51,7 @@ class VariableAssignment(CodeStatement):
 @dataclass
 class Conditional(CodeStatement):
     keyword: str
-    condition: list[Token]
+    expression: list[Token]
     code: list[tuple[CodeStatement, ...]]
 
 # name expression !?
@@ -297,7 +297,7 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
             code = statements_inside_scope
         ), Conditional(
             keyword = keyword,
-            condition = expression,
+            expression = expression,
             code = statements_inside_scope
         )
 
@@ -310,7 +310,7 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
             code = statements_inside_scope
         ), Conditional(
             keyword = without_whitespace[0].value,
-            condition = without_whitespace[1:],
+            expression = without_whitespace[1:],
             code = statements_inside_scope
         )
 
@@ -318,7 +318,7 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
 
         return Conditional(
             keyword = without_whitespace[0].value,
-            condition = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
+            expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
             code = statements_inside_scope
         ),
 
