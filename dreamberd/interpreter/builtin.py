@@ -1,9 +1,12 @@
 from __future__ import annotations
 from abc import ABCMeta
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Union
+from typing import Any, Callable, Optional, Union
+from dreamberd.base import InterpretationError
 
 from dreamberd.processor.syntax_tree import CodeStatement
+
+FLOAT_TO_INT_PREC = 0.00000001
 
 class Value(metaclass=ABCMeta):
     pass
@@ -11,7 +14,8 @@ class Value(metaclass=ABCMeta):
 @dataclass 
 class DreamberdFunction(Value):
     args: list[str]
-    code: list[CodeStatement]
+    code: list[tuple[CodeStatement, ...]]
+    is_async: bool
 
 @dataclass
 class BuiltinFunction(Value):
@@ -27,28 +31,39 @@ class DreamberdList(Value):
 
         def db_list_push(val: Value) -> None:
             self.values.append(val) 
+            self.create_namespace(True)  # update the length
+
+        def db_list_index(index: DreamberdNumber) -> Value:
+            if min(index.value % 1, 1 - index.value % 1) > FLOAT_TO_INT_PREC:
+                raise InterpretationError("Expected integer for list indexing.")
+            elif not -1 <= index.value <= len(self.values) - 1:
+                raise InterpretationError("Indexing out of list bounds.")
+            return self.values[round(index.value) - 1]
 
         def db_list_pop(index: DreamberdNumber) -> Value:
-            if not isinstance(index.value, int):
-                raise TypeError("Expected integer for list popping.")
+            if min(index.value % 1, 1 - index.value % 1) > FLOAT_TO_INT_PREC:
+                raise InterpretationError("Expected integer for list popping.")
             elif not -1 <= index.value <= len(self.values) - 1:
-                raise IndexError("Indexing out of list bounds.")
-            return self.values.pop(index.value - 1)
+                raise InterpretationError("Indexing out of list bounds.")
+            self.namespace["length"] = Name('length', DreamberdNumber(len(self.values) - 1))
+            return self.values.pop(round(index.value) - 1)
 
         def db_list_assign(index: DreamberdNumber, val: Value) -> None:
-            if isinstance(index.value, int):
+            if min(index.value % 1, 1 - index.value % 1) < FLOAT_TO_INT_PREC:
                 if not -1 <= index.value <= len(self.values) - 1:
-                    raise IndexError("Indexing out of list bounds.")
-                self.values[index.value - 1] = val
+                    raise InterpretationError("Indexing out of list bounds.")
+                self.values[round(index.value) - 1] = val
             else:  # assign in the middle of the array
-                nearest_int_down = max(index.value // 1, 0)
+                nearest_int_down = max((index.value - 1) // 1, 0)
                 self.values[nearest_int_down:nearest_int_down] = [val]
-    
+                self.create_namespace(True)
+
         if not is_update:
             self.namespace = {
                 'push': Name('push', BuiltinFunction(1, db_list_push)),
-                'pop': Name('push', BuiltinFunction(1, db_list_pop)),
-                'assign': Name('push', BuiltinFunction(1, db_list_assign)),
+                'pop': Name('pop', BuiltinFunction(1, db_list_pop)),
+                'index': Name('index', BuiltinFunction(1, db_list_index)),
+                'assign': Name('assign', BuiltinFunction(1, db_list_assign)),
                 'length': Name('length', DreamberdNumber(len(self.values))),
             }
         elif is_update:
@@ -66,12 +81,12 @@ class DreamberdString(Value):
     namespace: dict[str, Name] = field(default_factory=dict)
 
     def create_namespace(self, is_update: bool = False):
-        def db_list_push(val: Value) -> None:
+        def db_str_push(val: Value) -> None:
             self.value += db_to_string(val).value
 
         if not is_update:
             self.namespace = {
-                'push': Name('push', BuiltinFunction(1, db_list_push)),
+                'push': Name('push', BuiltinFunction(1, db_str_push)),
                 'length': Name('length', DreamberdNumber(len(self.value))),
             }
         elif is_update:
@@ -84,18 +99,33 @@ class DreamberdBoolean(Value):
     value: Optional[bool]  # none represents maybe?
 
 @dataclass 
+class DreamberdUndefined(Value):
+    pass
+
+@dataclass 
 class DreamberdObject(Value):
     class_name: str
     namespace: dict[str, Name] = field(default_factory=dict)
 
 @dataclass 
-class Keyword(Value):
+class DreamberdMap(Value):
+    self_dict: dict[Any, Any]
+
+@dataclass 
+class DreamberdKeyword(Value):
     value: str
+
+@dataclass 
+class NextVariable:
+    value: Optional[Value]
+    waiting_loc: Optional[Value]
 
 @dataclass
 class Name:
     name: str
     value: Value
+    next_listener: Optional[NextVariable] = None
+    previous_value: Optional[Value] = None
 
 @dataclass 
 class VariableLifetime:
@@ -125,7 +155,7 @@ class Variable:
     @property
     def value(self) -> Value:
         return self.lifetimes[0].value
-
+    
 def all_function_keywords() -> list[str]:
 
     # this code boutta be crazy
@@ -142,8 +172,8 @@ def all_function_keywords() -> list[str]:
                                     keywords.add("".join([c * i for c, i in zip('function', [f, u, n, c, t, i, o, n2])]) or 'fn')
     return list(keywords)
 
-function_keywords = all_function_keywords()
-KEYWORDS = {kw: Name(kw, Keyword(kw)) for kw in ['class', 'className', 'const', 'var', 'when', 'if', 'async', 'return', 'delete'] + function_keywords}
+FUNCTION_KEYWORDS = all_function_keywords()
+KEYWORDS = {kw: Name(kw, DreamberdKeyword(kw)) for kw in ['class', 'className', 'const', 'var', 'when', 'if', 'async', 'return', 'delete'] + FUNCTION_KEYWORDS}
 
 ############################################
 ##           DREAMBERD BUILTINS           ##
@@ -165,6 +195,8 @@ def db_to_string(val: Value) -> DreamberdString:
             return_string = f"<function ({', '.join(val.args)})>"
         case DreamberdObject():
             return_string = f"<object {val.class_name}>" 
+        case DreamberdUndefined():
+            return_string = "undefined"
     return DreamberdString(return_string)
 
 def db_print(*vals: Value) -> None:
@@ -177,9 +209,14 @@ def db_to_number(val: Value) -> DreamberdNumber:
             return_number = val.value
         case DreamberdString():
             return_number = float(val.value)
+        case DreamberdUndefined():
+            return_number = 0 
+        case DreamberdBoolean():
+            return_number = int(val.value is not None and val.value) + (val.value is None) * 0.5
+        case _:
+            raise InterpretationError(f"Cannot turn type {type(val).__name__} into a number.")
+    return DreamberdNumber(return_number)
 
 def db_exit() -> None:
     exit()
 
-def after() -> None:
-    exit()
