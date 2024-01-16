@@ -122,17 +122,17 @@ class DreamberdMap(Value):
 class DreamberdKeyword(Value):
     value: str
 
-@dataclass 
-class NextVariable:
-    value: Optional[Value]
-    waiting_loc: Optional[Value]
+# @dataclass 
+# class NextVariable:
+#     value: Optional[Value]
+#     waiting_loc: Optional[Value]
 
 @dataclass
 class Name:
     name: str
     value: Value
-    next_listener: Optional[NextVariable] = None
-    previous_value: Optional[Value] = None
+    # next_listener: Optional[NextVariable] = None
+    # previous_value: Optional[Value] = None
 
 @dataclass 
 class VariableLifetime:
@@ -145,6 +145,7 @@ class VariableLifetime:
 class Variable:
     name: str 
     lifetimes: list[VariableLifetime]
+    prev_values: list[Value]
 
     def add_lifetime(self, value: Value, line: int, confidence: int, duration: int) -> None:
         for i in range(len(self.lifetimes)):
