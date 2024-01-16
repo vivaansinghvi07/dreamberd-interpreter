@@ -34,6 +34,9 @@ class DreamberdList(Value):
     values: list[Value]
     namespace: dict[str, Name] = field(default_factory=dict)
 
+    def __post_init__(self):
+        self.create_namespace()
+
     def create_namespace(self, is_update: bool = False) -> None:
 
         def db_list_push(val: Value) -> None:
@@ -87,6 +90,9 @@ class DreamberdString(Value):
     value: str 
     namespace: dict[str, Name] = field(default_factory=dict)
 
+    def __post_init__(self):
+        self.create_namespace()
+
     def create_namespace(self, is_update: bool = False):
         def db_str_push(val: Value) -> None:
             self.value += db_to_string(val).value
@@ -127,6 +133,10 @@ class DreamberdKeyword(Value):
 #     value: Optional[Value]
 #     waiting_loc: Optional[Value]
 
+@dataclass 
+class DreamberdPromise(Value):
+    value: Optional[Value]
+
 @dataclass
 class Name:
     name: str
@@ -137,8 +147,7 @@ class Name:
 @dataclass 
 class VariableLifetime:
     value: Value
-    start: int
-    duration: int 
+    lines_left: int 
     confidence: int
 
 @dataclass
@@ -147,22 +156,24 @@ class Variable:
     lifetimes: list[VariableLifetime]
     prev_values: list[Value]
 
-    def add_lifetime(self, value: Value, line: int, confidence: int, duration: int) -> None:
+    def add_lifetime(self, value: Value, confidence: int, duration: int) -> None:
         for i in range(len(self.lifetimes)):
             if self.lifetimes[i].confidence == confidence:
-                self.lifetimes[i:i] = [VariableLifetime(value, line, duration, confidence)]
+                self.lifetimes[i:i] = [VariableLifetime(value, duration, confidence)]
 
-    def clear_outdated_lifetimes(self, line: int) -> None:
+    def clear_outdated_lifetimes(self) -> None:
         remove_indeces = []
         for i, l in enumerate(self.lifetimes):
-            if line - l.start > l.duration:
+            if l.lines_left == 0:
                 remove_indeces.append(i)
         for i in reversed(remove_indeces):
             del self.lifetimes[i]
 
     @property
     def value(self) -> Value:
-        return self.lifetimes[0].value
+        if self.lifetimes:
+            return self.lifetimes[0].value
+        raise InterpretationError("Variable is undefined.")
     
 def all_function_keywords() -> list[str]:
 
