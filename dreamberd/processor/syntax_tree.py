@@ -85,9 +85,8 @@ class WhenStatement(CodeStatement):
 @dataclass 
 class AfterStatement(CodeStatement):
     keyword: str
-    event: str 
     expression: Union[list[Token], ExpressionTreeNode]
-    is_debug: bool
+    code: list[tuple[CodeStatement, ...]]
 
 # idea: create a class that evaluates at runtime what a statement is, so then execute it 
 def split_into_statements(tokens: list[Token]) -> list[list[Token]]:
@@ -275,11 +274,15 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
                    without_whitespace[1].type == TokenType.NAME and \
                    without_whitespace[2].type == TokenType.R_CURLY
 
+    # finally finally, check for the after statement -- this will have identical syntax to the conditional so there 
+    # is no point in doing anything extra special
+
     # this dude is seperated to another function because the same code is reused in () => ... functions (no scope)
     if can_be_function:
         return create_function_definition(filename, without_whitespace, code, statements_inside_scope)
 
-    elif can_be_when:
+    possibilities = []
+    if can_be_when:
     
         # build thing for the when statement
         when_keywords, curr = [], 0
@@ -291,37 +294,34 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
         keyword, name = when_keywords
         expression = tokens[curr - 1 : scope_open_index]
 
-        return WhenStatement(
+        possibilities.append(WhenStatement(
             keyword = keyword,
             name = name, 
             expression = expression,
             code = statements_inside_scope
-        ), Conditional(
-            keyword = keyword,
-            expression = expression,
-            code = statements_inside_scope
-        )
+        ))
 
-    elif can_be_class:
+    if can_be_class:
 
         # build thing for the class statement
-        return ClassDeclaration(
+        possibilities.append(ClassDeclaration(
             keyword = without_whitespace[0].value,
             name = without_whitespace[1].value,
             code = statements_inside_scope
-        ), Conditional(
-            keyword = without_whitespace[0].value,
-            expression = without_whitespace[1:],
-            code = statements_inside_scope
-        )
+        ))
 
-    else:
-
-        return Conditional(
+    possibilities.extend([
+        Conditional(
             keyword = without_whitespace[0].value,
             expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
             code = statements_inside_scope
-        ),
+        ), AfterStatement(
+            keyword = without_whitespace[0].value,
+            expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
+            code = statements_inside_scope
+        )
+    ]) 
+    return tuple(possibilities)
 
 def create_unscoped_code_statement(filename: str, tokens: list[Token], without_whitespace: list[Token], code: str) -> tuple[CodeStatement, ...]: 
     
@@ -374,10 +374,6 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             var_assignment_index[-1].append(t)
     var_assignment_index.pop()  # the last one will always be empty
 
-    # check for the "after" statement 
-    can_be_after = without_whitespace[0].type == TokenType.NAME and \
-                   without_whitespace[1].type in {TokenType.STRING, TokenType.NAME}
-
     # checking modifiers and lifetime for varianle declaration
     names_in_row = []
     looking_for_lifetime, lifetime = False, None
@@ -428,13 +424,6 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             expression = tokens[tokens_is_equal.index(True) + 1 : -1],
             debug = is_debug, 
             index = var_assignment_index or None
-        ))
-    if can_be_after:
-        possibilities.append(AfterStatement(
-            keyword = without_whitespace[0].value,
-            event = without_whitespace[1].value,
-            expression = tokens[tokens.index(without_whitespace[1]) + 1 : -1],
-            is_debug = is_debug
         ))
     return tuple(possibilities)
 
