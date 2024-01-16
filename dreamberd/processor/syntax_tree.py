@@ -1,8 +1,9 @@
 from abc import ABCMeta
-from typing import Optional
+from typing import Optional, Union
 from dataclasses import dataclass
 
 from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, raise_error_at_line, raise_error_at_token
+from dreamberd.processor.expression_tree import ExpressionTreeNode
 
 class CodeStatement(metaclass=ABCMeta):
     pass
@@ -32,7 +33,7 @@ class VariableDeclaration(CodeStatement):
     name: str
     modifiers: list[str]
     lifetime: Optional[str]
-    expression: list[Token]
+    expression: Union[list[Token], ExpressionTreeNode]
     debug: bool
     confidence: int  ## amount of !!! after the decl for priority
 
@@ -40,7 +41,7 @@ class VariableDeclaration(CodeStatement):
 @dataclass 
 class VariableAssignment(CodeStatement):
     name: str
-    expression: list[Token]
+    expression: Union[list[Token], ExpressionTreeNode]
     debug: bool 
     index: Optional[list[list[Token]]]  # list[Token] here is an expression not evaled yet
 
@@ -51,14 +52,14 @@ class VariableAssignment(CodeStatement):
 @dataclass
 class Conditional(CodeStatement):
     keyword: str
-    expression: list[Token]
+    expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
 
 # name expression !?
 @dataclass
 class ReturnStatement(CodeStatement):
     keyword: str
-    expression: list[Token]
+    expression: Union[list[Token], ExpressionTreeNode]
     debug: bool
 @dataclass
 class DeleteStatement(CodeStatement):
@@ -69,7 +70,7 @@ class DeleteStatement(CodeStatement):
 # expression !?   < virtually indistinguishable from a return statement from a parsing perspective
 @dataclass
 class ExpressionStatement(CodeStatement):
-    expression: list[Token]
+    expression: Union[list[Token], ExpressionTreeNode]
     debug: bool
 
 # name name = expression { 
@@ -77,7 +78,7 @@ class ExpressionStatement(CodeStatement):
 class WhenStatement(CodeStatement):
     keyword: str
     name: str 
-    expression: list[Token]
+    expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
 
 # name "string" expression!
@@ -85,7 +86,7 @@ class WhenStatement(CodeStatement):
 class AfterStatement(CodeStatement):
     keyword: str
     event: str 
-    expression: list[Token]
+    expression: Union[list[Token], ExpressionTreeNode]
     is_debug: bool
 
 # idea: create a class that evaluates at runtime what a statement is, so then execute it 
