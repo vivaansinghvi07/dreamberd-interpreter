@@ -263,11 +263,24 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
 
     # now check for the shape of the when keyword
     can_be_when = without_whitespace[0].type == TokenType.NAME and \
-                  without_whitespace[1].type == TokenType.NAME and \
-                  without_whitespace[2].type in {
+                  without_whitespace[1].type == TokenType.NAME
+    comparison_operators = {
         TokenType.GREATER_THAN, TokenType.GREATER_EQUAL, 
         TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS_THAN, TokenType.LESS_EQUAL
     }
+    if can_be_when and without_whitespace[2].type in comparison_operators:
+        can_be_when = True 
+    elif not can_be_when and without_whitespace[2].type == TokenType.L_SQUARE:
+        bracket_layers, curr = 1, 3 
+        while bracket_layers != 0 and curr < len(without_whitespace):
+            t = without_whitespace[curr]
+            if t.type == TokenType.L_SQUARE:
+                bracket_layers += 1
+            elif t.type == TokenType.R_SQUARE:
+                bracket_layers -= 1
+            curr += 1
+        if without_whitespace[curr].type in comparison_operators:
+            can_be_when = True
 
     # now finally, check for classes
     can_be_class = without_whitespace[0].type == TokenType.NAME and \
