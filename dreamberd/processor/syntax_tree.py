@@ -378,7 +378,7 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             bracket_layers -= 1
             if bracket_layers == 0:
                 add_to_var_assignment_index = False
-                var_assignment_index += []
+                var_assignment_index.append([])
             continue
         elif bracket_layers == 0 and t.type == TokenType.EQUAL:  # exit when hitting the equals
             break

@@ -118,7 +118,7 @@ class DreamberdUndefined(Value):
 @dataclass 
 class DreamberdObject(Value):
     class_name: str
-    namespace: dict[str, Name] = field(default_factory=dict)
+    namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
 @dataclass 
 class DreamberdMap(Value):
