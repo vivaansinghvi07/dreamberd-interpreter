@@ -116,7 +116,7 @@ def declare_new_variable(filename: str, code: str, name: str, value: Value, life
                     del target_var.lifetimes[i]
         Thread(target=remove_lifetime, args=(lifetime, target_var, target_lifetime)).start()
 
-def assign_variable(filename: str, code: str, name: str, index: Optional[Value], value: Value, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]], name_watchers: NameWatchers):
+def assign_variable(filename: str, code: str, name: str, indeces: list[Value], value: Value, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]], name_watchers: NameWatchers):
     pass
         
 def get_value_from_promise(val: DreamberdPromise) -> Value:
@@ -607,7 +607,7 @@ def determine_statement_type(possible_statements: tuple[CodeStatement, ...], nam
             return st
     return None 
 
-def adjust_for_normal_nexts(statement: CodeStatementWithExpression, async_nexts: set[str], normal_nexts: set[tuple[str, int]], promise: Optional[DreamberdPromise], namespaces: list[Namespace], name_watchers: NameWatchers):
+def adjust_for_normal_nexts(statement: CodeStatementWithExpression, async_nexts: set[str], normal_nexts: set[tuple[str, int]], promise: Optional[DreamberdPromise], namespaces: list[Namespace], prev_namespace: Namespace, name_watchers: NameWatchers):
 
     old_async_vals, old_normal_vals = [], []
     get_state_watcher = lambda val: None if not val else len(v) if (v := getattr(val, "prev_values")) else 0
@@ -654,7 +654,7 @@ def adjust_for_normal_nexts(statement: CodeStatementWithExpression, async_nexts:
     # this new_namespace i am adding is purely for use in evaluation of expressions, and the code within 
     # a code statement should not use that namespace. therefore, some logic must be done to remove that namespace 
     # when the expression of a code statement is executed
-    name_watchers |= {(name.split('.')[-1], ns_id): (statement, normal_nexts, namespaces + [new_namespace], promise) for name, ns_id in normal_nexts} 
+    name_watchers |= {(name.split('.')[-1], ns_id): (statement, normal_nexts, namespaces + [new_namespace | prev_namespace], promise) for name, ns_id in normal_nexts} 
 
 def wait_for_async_nexts(async_nexts: set[str], namespaces: list[Namespace]) -> Namespace:
 
@@ -685,9 +685,13 @@ def wait_for_async_nexts(async_nexts: set[str], namespaces: list[Namespace]) -> 
     return new_namespace
 
 def interpret_name_watching_statement(filename, code, statement: CodeStatementWithExpression, namespaces: list[Namespace], promise: Optional[DreamberdPromise], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]], name_watchers: NameWatchers): 
+
     # evaluate the expression using the names off the top
     expr_val = evaluate_expression(filename, code, get_built_expression(filename, code, statement.expression), namespaces, async_statements, name_watchers) 
+    index_vals = [evaluate_expression(filename, code, get_built_expression(filename, code, expr), namespaces, async_statements, name_watchers) 
+                  for expr in statement.indexes] if isinstance(statement, VariableAssignment) else []
     namespaces.pop()  # remove expired namespace
+
     match statement:
         case ReturnStatement():
             if promise is None:
@@ -710,15 +714,14 @@ def clear_temp_namespace(namespaces: list[Namespace], temp_namespace: Namespace)
 
 def interpret_statement(filename: str, code: str, statement: CodeStatement, namespaces: list[Namespace], async_statements:  list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]], name_watchers: NameWatchers):
 
- 
     # build a list of expressions that are modified to allow for the next keyword
     expressions_to_check: list[Union[list[Token], ExpressionTreeNode]] = []
     match statement:
-        case VariableAssignment(): expressions_to_check = [statement.expression] + statement.index
+        case VariableAssignment(): expressions_to_check = [statement.expression] + statement.indexes
         case VariableDeclaration() | Conditional() | WhenStatement() | AfterStatement() | ExpressionStatement(): expressions_to_check = [statement.expression]
     all_normal_nexts: set[tuple[str, int]] = set()
     all_async_nexts: set[str] = set()
-    next_filtered_exprs = []
+    next_filtered_exprs: list[ExpressionTreeNode] = []
     for expr in expressions_to_check:
         built_expr = get_built_expression(filename, code, expr)
         new_expr, normal_nexts, async_nexts = handle_next_expressions(filename, code, built_expr, namespaces)
@@ -729,62 +732,34 @@ def interpret_statement(filename: str, code: str, statement: CodeStatement, name
     all_nexts = {s[0] for s in all_normal_nexts} | all_async_nexts
     for expr in next_filtered_exprs:
         prev_namespace |= save_previous_values_next_expr(filename, code, expr, all_nexts, namespaces)
-    namespaces[-1] |= prev_namespace
+
+    # we replace the expression stored in each statement with the newly built one
+    match statement:
+        case VariableAssignment():
+            statement.expression = next_filtered_exprs[0]
+            statement.indexes = next_filtered_exprs[1:]
+        case VariableDeclaration() | Conditional() | WhenStatement() | AfterStatement() | ExpressionStatement():
+            statement.expression = next_filtered_exprs[0]
     if all_normal_nexts:
-        match statement:
-            case VariableAssignment():
-                statement.expression = next_filtered_exprs[0]
-                statement.index = next_filtered_exprs[1:]
-            case VariableDeclaration() | Conditional() | WhenStatement() | AfterStatement() | ExpressionStatement():
-                statement.expression = next_filtered_exprs[0]
+        match statement:  # this is here to make sure everything is going somewhat smoothly
+            case VariableAssignment() | VariableDeclaration() | Conditional() | WhenStatement() | AfterStatement() | ExpressionStatement(): pass
             case _:
                 raise InterpretationError("Something went wrong. It's not your fault, it's mine.")
-        adjust_for_normal_nexts(statement, all_async_nexts, all_normal_nexts, None, namespaces, name_watchers)
-    else:
-        if all_async_nexts:
-            prev_namespace |= wait_for_async_nexts(all_async_nexts, namespaces)
-            namespaces[-1] |= prev_namespace
-        # perform statement matching here
-    clear_temp_namespace(namespaces, prev_namespace)
+        adjust_for_normal_nexts(statement, all_async_nexts, all_normal_nexts, None, namespaces, prev_namespace, name_watchers)
+        return   # WE ARE EXITING HERE!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+    if all_async_nexts:  # temporarily put prev_next_valeus (blah blah blah) into the namespace along with those that are generated from await next
+        prev_namespace |= wait_for_async_nexts(all_async_nexts, namespaces)
+        namespaces[-1] |= prev_namespace
+
+    # finally actually execute the damn thing
     match statement:
-        
         case VariableAssignment():
-            evaled_expression = get_built_expression(filename, code, statement.expression)
-            evaled_index_expressions = [get_built_expression(filename, code, x) for x in statement.index] if statement.index else []
-            expr, normal_nexts, async_nexts = handle_next_expressions(filename, code, evaled_expression, namespaces)
-            index_exprs = []
-            for index_expr in evaled_index_expressions:
-                index_expr, index_normal_nexts, index_async_nexts = handle_next_expressions(filename, code, index_expr, namespaces)
-                normal_nexts |= index_normal_nexts
-                async_nexts |= index_async_nexts
-                index_exprs.append(index_expr)
-            all_next_names = {s[0] for s in normal_nexts} | async_nexts
-            temp_namespace = save_previous_values_next_expr(filename, code, expr, all_next_names, namespaces)
-            for index_expr in index_exprs:
-                temp_namespace |= save_previous_values_next_expr(filename, code, index_expr, all_next_names, namespaces)
-            if normal_nexts:
-                adjust_for_normal_nexts(statement, expr, async_nexts, normal_nexts, None, namespaces, name_watchers)
-            else:
-                if async_nexts:
-                    temp_namespace = wait_for_async_nexts(async_nexts, namespaces)
-                assign_variable(filename, code, statement.name, statement.index, evaluate_expression(
-                    filename, code, expr, namespaces, async_statements, name_watchers
-                ), namespaces, async_statements, name_watchers)
-        case DeleteStatement():
-            pass
-
-        case ExpressionStatement():
-            pass
-
-        case Conditional():
-            pass
-
-        case AfterStatement():
-            pass
-
-        case WhenStatement():
-            pass
+            assign_variable(filename, code, statement.name, [ 
+                evaluate_expression(filename, code, expr, namespaces, async_statements, name_watchers) for expr in statement.indexes
+            ], evaluate_expression(
+                filename, code, statement.expression, namespaces, async_statements, name_watchers
+            ), namespaces, async_statements, name_watchers)
 
         case FunctionDefinition():
             namespaces[-1][statement.name] = Name(statement.name, DreamberdFunction(
@@ -794,21 +769,10 @@ def interpret_statement(filename: str, code: str, statement: CodeStatement, name
             ))
 
         case VariableDeclaration():
-            evaled_expression = get_built_expression(filename, code, statement.expression)
-            expr, normal_nexts, async_nexts = handle_next_expressions(filename, code, evaled_expression, namespaces)
-            temp_namespace = save_previous_values_next_expr(filename, code, expr, async_nexts | {s[0] for s in normal_nexts}, namespaces) 
-            namespaces[-1] |= temp_namespace
-            if normal_nexts:
-                # in this case, temp_namespace will only have the data from the previous values
-                adjust_for_normal_nexts(statement, expr, async_nexts, normal_nexts, None, namespaces, name_watchers)
-            else:
-                temp_namespace |= wait_for_async_nexts(async_nexts, namespaces)
-                namespaces[-1] |= temp_namespace
-                declare_new_variable(filename, code, statement.name, evaluate_expression(
-                    filename, code, expr, namespaces, async_statements, name_watchers
-                ), statement.lifetime, statement.confidence, namespaces, async_statements, name_watchers)
-            clear_temp_namespace(namespaces, temp_namespace)
-            
+            declare_new_variable(filename, code, statement.name, evaluate_expression(
+                filename, code, statement.expression, namespaces, async_statements, name_watchers
+            ), statement.lifetime, statement.confidence, namespaces, async_statements, name_watchers)
+
         case ClassDeclaration(): 
 
             class_namespace: Namespace = {}
@@ -836,6 +800,26 @@ def interpret_statement(filename: str, code: str, statement: CodeStatement, name
                 return DreamberdObject(class_name, class_namespace)
 
             namespaces[-1][statement.name] = Name(statement.name, BuiltinFunction(-1, class_object_closure))
+
+    clear_temp_namespace(namespaces, prev_namespace)
+
+    match statement:
+        
+        case DeleteStatement():
+            pass
+
+        case ExpressionStatement():
+            pass
+
+        case Conditional():
+            pass
+
+        case AfterStatement():
+            pass
+
+        case WhenStatement():
+            pass
+            
  
 def fill_class_namespace(filename: str, code: str, statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], class_namespace: Namespace, async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]], name_watchers: NameWatchers) -> None:
     for possible_statements in statements:
