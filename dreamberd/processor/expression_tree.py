@@ -9,12 +9,12 @@ class ExpressionTreeNode(metaclass=ABCMeta):
 
 # things like the not operator
 class SingleOperatorNode(ExpressionTreeNode):
-    def __init__(self, expression: ExpressionTreeNode, operator: str) -> None:
+    def __init__(self, expression: ExpressionTreeNode, operator: Token) -> None:
         self.expression = expression
         self.operator = operator
     def to_string(self, tabs: int = 0) -> str:
         return f"{'  ' * tabs}Single Operator: \n" + \
-               f"{'  ' * (tabs + 1)}Operator: {self.operator}\n" + \
+               f"{'  ' * (tabs + 1)}Operator: {self.operator.value}\n" + \
                f"{'  ' * (tabs + 1)}Expression: \n" + \
                f"{self.expression.to_string(tabs + 2)}"
         
@@ -135,13 +135,13 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         function_node = FunctionNode(tokens[first_name_index],
                                      [build_expression_tree(filename, tokens[first_name_index + 1:], code)])
         if starts_with_operator:
-            return SingleOperatorNode(function_node, tokens_without_whitespace[0].value)
+            return SingleOperatorNode(function_node, tokens_without_whitespace[0])
         return function_node
 
     # there is no operator, must be just a value
     if starts_with_operator and (max_index == -1 or (t := tokens[int(starts_with_whitespace) + 1]).type == TokenType.WHITESPACE and \
         len(t.value) > max_width or updated_list[max_index] == OperatorType.COM):
-        return SingleOperatorNode(build_expression_tree(filename, tokens[int(starts_with_whitespace) + 1:], code), tokens_without_whitespace[0].value)
+        return SingleOperatorNode(build_expression_tree(filename, tokens[int(starts_with_whitespace) + 1:], code), tokens_without_whitespace[0])
 
     # value, like a list, name, or anything else
     if max_index == -1:
