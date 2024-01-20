@@ -139,7 +139,8 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         return function_node
 
     # there is no operator, must be just a value
-    if (max_index == -1 or updated_list[max_index] == OperatorType.COM) and starts_with_operator:
+    if starts_with_operator and (max_index == -1 or (t := tokens[int(starts_with_whitespace) + 1]).type == TokenType.WHITESPACE and \
+        len(t.value) > max_width or updated_list[max_index] == OperatorType.COM):
         return SingleOperatorNode(build_expression_tree(filename, tokens[int(starts_with_whitespace) + 1:], code), tokens_without_whitespace[0].value)
 
     # value, like a list, name, or anything else
@@ -149,9 +150,9 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         try:
             name_or_value = tokens_without_whitespace[0]
             if name_or_value.type not in [TokenType.NAME, TokenType.L_SQUARE, TokenType.STRING]:
-                raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0])
+                raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0]); raise 
         except IndexError:
-            raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0])
+            raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0]); raise
 
         # this is a list :)
         if name_or_value.type == TokenType.L_SQUARE:
@@ -249,9 +250,12 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         ])
 
     else: 
+        operator = updated_list[max_index]
+        if not isinstance(operator, OperatorType): 
+            raise_error_at_token(filename, code, "Something went wrong. My bad.", tokens[max_index]); raise
         return ExpressionNode(
             build_expression_tree(filename, tokens[:max_index], code), 
             build_expression_tree(filename, tokens[max_index + 1:], code), 
-            operator=updated_list[max_index],
+            operator=operator,
             operator_token=tokens[max_index]
         )

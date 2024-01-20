@@ -1,12 +1,15 @@
-from abc import ABCMeta
+from abc import ABCMeta 
 from typing import Optional, Union
 from dataclasses import dataclass
 
 from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, raise_error_at_line, raise_error_at_token
 from dreamberd.processor.expression_tree import ExpressionTreeNode
 
-class CodeStatement(metaclass=ABCMeta):
+class CodeStatement():
     pass
+
+class CodeStatementKeywordable(metaclass=ABCMeta):  # this is completely unnecessary lmao
+    keyword: str
 
 # name name argname, argname, argname => {  ...
 # for single line arrows, this is:
@@ -21,7 +24,7 @@ class FunctionDefinition(CodeStatement):
 
 # name name {
 @dataclass
-class ClassDeclaration(CodeStatement):
+class ClassDeclaration(CodeStatement, CodeStatementKeywordable):
     keyword: str
     name: str 
     code: list[tuple[CodeStatement, ...]]
@@ -43,26 +46,27 @@ class VariableAssignment(CodeStatement):
     name: str
     expression: Union[list[Token], ExpressionTreeNode]
     debug: bool 
-    index: Optional[list[list[Token]]]  # list[Token] here is an expression not evaled yet
+    indexes: Union[list[list[Token]], list[ExpressionTreeNode]]  # list[Token] here is an expression not evaled yet
+    confidence: int 
 
 # name expression { 
 # since an expression can be a name:
 #   name name {  
 # can be both, and would have to be determined at runtime
 @dataclass
-class Conditional(CodeStatement):
+class Conditional(CodeStatement, CodeStatementKeywordable):
     keyword: str
     expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
 
 # name expression !?
 @dataclass
-class ReturnStatement(CodeStatement):
+class ReturnStatement(CodeStatement, CodeStatementKeywordable):
     keyword: str
     expression: Union[list[Token], ExpressionTreeNode]
     debug: bool
 @dataclass
-class DeleteStatement(CodeStatement):
+class DeleteStatement(CodeStatement, CodeStatementKeywordable):
     keyword: str
     name: str
     debug: bool
@@ -75,7 +79,7 @@ class ExpressionStatement(CodeStatement):
 
 # name name = expression { 
 @dataclass
-class WhenStatement(CodeStatement):
+class WhenStatement(CodeStatement, CodeStatementKeywordable):
     keyword: str
     name: str 
     expression: Union[list[Token], ExpressionTreeNode]
@@ -83,7 +87,7 @@ class WhenStatement(CodeStatement):
 
 # name "string" expression!
 @dataclass 
-class AfterStatement(CodeStatement):
+class AfterStatement(CodeStatement, CodeStatementKeywordable):
     keyword: str
     expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
@@ -362,7 +366,7 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
     # checking for single name and index for variable assignment 
     can_be_var_assignment &= len(without_whitespace) >= 4 and without_whitespace[0].type == TokenType.NAME and \
                              without_whitespace[1].type in {TokenType.EQUAL, TokenType.L_SQUARE}
-    var_assignment_index = [[]]   # is list[list] to handle multiple indexes
+    var_assignment_index: list[list[Token]] = [[]]   # is list[list] to handle multiple indexes
     bracket_layers, add_to_var_assignment_index = 0, False
     for t in tokens:
 
@@ -436,7 +440,8 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             name = without_whitespace[0].value,
             expression = tokens[tokens_is_equal.index(True) + 1 : -1],
             debug = is_debug, 
-            index = var_assignment_index or None
+            indexes = var_assignment_index,
+            confidence = confidence
         ))
     return tuple(possibilities)
 
