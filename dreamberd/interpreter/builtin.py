@@ -1,5 +1,5 @@
 from __future__ import annotations
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Union
 from dreamberd.base import InterpretationError
@@ -15,8 +15,27 @@ def db_not(x: DreamberdBoolean) -> DreamberdBoolean:
         return DreamberdBoolean(None)
     return DreamberdBoolean(not x.value)
 
-class Value(metaclass=ABCMeta):
+# class Value(metaclass=ABCMeta):   # TODO POTENTIALLY DO THIS TO ALLOW FOR MORE OBJECTS WITHOUT MUCH HASSLE
+#     @abstractmethod 
+#     def to_bool(self) -> Value: pass
+#     @abstractmethod 
+#     def to_num(self) -> Value: pass
+#     @abstractmethod 
+#     def to_str(self) -> Value: pass
+
+class Value():  # base class for shit  
     pass
+
+class DreamberdIndexable(metaclass=ABCMeta):
+    
+    @abstractmethod 
+    def access_index(self, index: Value) -> Value: pass
+
+    @abstractmethod
+    def assign_index(self, index: Value, val: Value) -> None: pass
+
+class DreamberdNamespaceable(metaclass=ABCMeta):
+    namespace: dict[str, Union[Name, Variable]]
 
 @dataclass 
 class DreamberdFunction(Value):
@@ -30,27 +49,20 @@ class BuiltinFunction(Value):
     function: Callable
 
 @dataclass 
-class DreamberdList(Value):
+class DreamberdList(Value, DreamberdIndexable, DreamberdNamespaceable):
     values: list[Value]
-    namespace: dict[str, Name] = field(default_factory=dict)
+    namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
     def __post_init__(self):
         self.create_namespace()
 
     def create_namespace(self, is_update: bool = False) -> None:
 
-        def db_list_push(val: Value) -> None:
+        def db_list_push(self, val: Value) -> None:
             self.values.append(val) 
             self.create_namespace(True)  # update the length
 
-        def db_list_index(index: DreamberdNumber) -> Value:
-            if not is_int(index.value):
-                raise InterpretationError("Expected integer for list indexing.")
-            elif not -1 <= index.value <= len(self.values) - 1:
-                raise InterpretationError("Indexing out of list bounds.")
-            return self.values[round(index.value) - 1]
-
-        def db_list_pop(index: DreamberdNumber) -> Value:
+        def db_list_pop(self, index: DreamberdNumber) -> Value:
             if not is_int(index.value):
                 raise InterpretationError("Expected integer for list popping.")
             elif not -1 <= index.value <= len(self.values) - 1:
@@ -58,22 +70,10 @@ class DreamberdList(Value):
             self.namespace["length"] = Name('length', DreamberdNumber(len(self.values) - 1))
             return self.values.pop(round(index.value) - 1)
 
-        def db_list_assign(index: DreamberdNumber, val: Value) -> None:
-            if is_int(index.value):
-                if not -1 <= index.value <= len(self.values) - 1:
-                    raise InterpretationError("Indexing out of list bounds.")
-                self.values[round(index.value) - 1] = val
-            else:  # assign in the middle of the array
-                nearest_int_down = max((index.value - 1) // 1, 0)
-                self.values[nearest_int_down:nearest_int_down] = [val]
-                self.create_namespace(True)
-
         if not is_update:
             self.namespace = {
-                'push': Name('push', BuiltinFunction(1, db_list_push)),
-                'pop': Name('pop', BuiltinFunction(1, db_list_pop)),
-                'index': Name('index', BuiltinFunction(1, db_list_index)),
-                'assign': Name('assign', BuiltinFunction(1, db_list_assign)),
+                'push': Name('push', BuiltinFunction(2, db_list_push)),
+                'pop': Name('pop', BuiltinFunction(2, db_list_pop)),
                 'length': Name('length', DreamberdNumber(len(self.values))),
             }
         elif is_update:
@@ -81,31 +81,68 @@ class DreamberdList(Value):
                 'length': Name('length', DreamberdNumber(len(self.values))),
             }
 
-@dataclass 
-class DreamberdNumber(Value):
+    def access_index(self, index: Value) -> Value:
+        if not isinstance(index, DreamberdNumber):
+            raise InterpretationError("Cannot index a list with a non-number value.")
+        if not is_int(index.value):
+            raise InterpretationError("Expected integer for list indexing.")
+        elif not -1 <= index.value <= len(self.values) - 1:
+            raise InterpretationError("Indexing out of list bounds.")
+        return self.values[round(index.value) - 1]
+
+    def assign_index(self, index: Value, val: Value) -> None:
+        if not isinstance(index, DreamberdNumber):
+            raise InterpretationError("Cannot index a list with a non-number value.")
+        if is_int(index.value):
+            if not -1 <= index.value <= len(self.values) - 1:
+                raise InterpretationError("Indexing out of list bounds.")
+            self.values[round(index.value) - 1] = val
+        else:  # assign in the middle of the array
+            nearest_int_down = max((index.value - 1) // 1, 0)
+            self.values[nearest_int_down:nearest_int_down] = [val]
+            self.create_namespace(True)
+
+@dataclass(unsafe_hash=True)
+class DreamberdNumber(Value, DreamberdIndexable):
     value: Union[int, float]
 
-@dataclass 
-class DreamberdString(Value):
+    def access_index(self, index: Value) -> Value:
+        if not isinstance(index, DreamberdNumber):
+            raise InterpretationError("Cannot index a number with a non-number value.")
+        pass
+
+    def assign_index(self, index: Value, val: Value) -> None:
+        if not isinstance(index, DreamberdNumber):
+            raise InterpretationError("Cannot index a number with a non-number value.")
+        pass
+
+@dataclass(unsafe_hash=True)
+class DreamberdString(Value, DreamberdIndexable, DreamberdNamespaceable):
     value: str 
-    namespace: dict[str, Name] = field(default_factory=dict)
+    namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
     def __post_init__(self):
         self.create_namespace()
 
     def create_namespace(self, is_update: bool = False):
-        def db_str_push(val: Value) -> None:
+        def db_str_push(self, val: Value) -> None:
             self.value += db_to_string(val).value
 
         if not is_update:
             self.namespace = {
-                'push': Name('push', BuiltinFunction(1, db_str_push)),
+                'push': Name('push', BuiltinFunction(2, db_str_push)),
                 'length': Name('length', DreamberdNumber(len(self.value))),
             }
         elif is_update:
             self.namespace |= {
                 'length': Name('length', DreamberdNumber(len(self.value))),
             }
+
+    def access_index(self, index: Value) -> Value:
+        pass
+
+    def assign_index(self, index: Value, val: Value) -> None:
+        pass
 
 @dataclass 
 class DreamberdBoolean(Value):
@@ -116,13 +153,19 @@ class DreamberdUndefined(Value):
     pass
 
 @dataclass 
-class DreamberdObject(Value):
+class DreamberdObject(Value, DreamberdNamespaceable):
     class_name: str
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
 @dataclass 
-class DreamberdMap(Value):
+class DreamberdMap(Value, DreamberdIndexable):
     self_dict: dict[Any, Any]
+
+    def access_index(self, index: DreamberdNumber) -> Value:
+        pass
+
+    def assign_index(self, index: DreamberdNumber, val: Value) -> None:
+        pass
 
 @dataclass 
 class DreamberdKeyword(Value):
@@ -157,6 +200,7 @@ class Variable:
     prev_values: list[Value]
 
     def add_lifetime(self, value: Value, confidence: int, duration: int) -> None:
+        self.prev_values.append(self.value)
         for i in range(len(self.lifetimes)):
             if self.lifetimes[i].confidence == confidence:
                 self.lifetimes[i:i] = [VariableLifetime(value, duration, confidence)]

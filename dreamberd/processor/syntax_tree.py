@@ -81,7 +81,6 @@ class ExpressionStatement(CodeStatement):
 @dataclass
 class WhenStatement(CodeStatement, CodeStatementKeywordable):
     keyword: str
-    name: str 
     expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
 
@@ -256,6 +255,8 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
     ends_with_punc = tokens[-1].type in {TokenType.BANG, TokenType.QUESTION}
     if tokens[-1 - int(ends_with_punc)].type != TokenType.R_CURLY:  # end will never be whitespace 
         raise_error_at_token(filename, code, "End of statement with open scope must close the scope.", tokens[-1])
+    if without_whitespace[0].type != TokenType.NAME:
+        raise_error_at_token(filename, code, "Scoped code statement must start with a keyword.", without_whitespace[0])
 
     # at this point, this can be the "when" keyword, a class dec, a function call, or an if statement
     scope_open_index = [t.type == TokenType.L_CURLY for t in tokens].index(True)
@@ -265,33 +266,12 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
     # see the function pointer -> immediately know
     can_be_function = any([t.type == TokenType.FUNC_POINT for i, t in enumerate(without_whitespace) if i < scope_open_index])
 
-    # now check for the shape of the when keyword
-    can_be_when = without_whitespace[0].type == TokenType.NAME and \
-                  without_whitespace[1].type == TokenType.NAME
-    comparison_operators = {
-        TokenType.GREATER_THAN, TokenType.GREATER_EQUAL, 
-        TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS_THAN, TokenType.LESS_EQUAL
-    }
-    if can_be_when and without_whitespace[2].type in comparison_operators:
-        can_be_when = True 
-    elif not can_be_when and without_whitespace[2].type == TokenType.L_SQUARE:
-        bracket_layers, curr = 1, 3 
-        while bracket_layers != 0 and curr < len(without_whitespace):
-            t = without_whitespace[curr]
-            if t.type == TokenType.L_SQUARE:
-                bracket_layers += 1
-            elif t.type == TokenType.R_SQUARE:
-                bracket_layers -= 1
-            curr += 1
-        if without_whitespace[curr].type in comparison_operators:
-            can_be_when = True
-
     # now finally, check for classes
     can_be_class = without_whitespace[0].type == TokenType.NAME and \
                    without_whitespace[1].type == TokenType.NAME and \
                    without_whitespace[2].type == TokenType.R_CURLY
 
-    # finally finally, check for the after statement -- this will have identical syntax to the conditional so there 
+    # finally finally, check for the after or when statement -- this will have identical syntax to the conditional so there 
     # is no point in doing anything extra special
 
     # this dude is seperated to another function because the same code is reused in () => ... functions (no scope)
@@ -299,25 +279,6 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
         return create_function_definition(filename, without_whitespace, code, statements_inside_scope)
 
     possibilities = []
-    if can_be_when:
-    
-        # build thing for the when statement
-        when_keywords, curr = [], 0
-        while len(when_keywords) < 2:
-            t = tokens[curr]
-            if t.type != TokenType.WHITESPACE:
-                when_keywords.append(t.value)
-            curr += 1
-        keyword, name = when_keywords
-        expression = tokens[curr - 1 : scope_open_index]
-
-        possibilities.append(WhenStatement(
-            keyword = keyword,
-            name = name, 
-            expression = expression,
-            code = statements_inside_scope
-        ))
-
     if can_be_class:
 
         # build thing for the class statement
@@ -333,6 +294,10 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
             expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
             code = statements_inside_scope
         ), AfterStatement(
+            keyword = without_whitespace[0].value,
+            expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
+            code = statements_inside_scope
+        ), WhenStatement(
             keyword = without_whitespace[0].value,
             expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
             code = statements_inside_scope
