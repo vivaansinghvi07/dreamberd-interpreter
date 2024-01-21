@@ -7,6 +7,7 @@ This is the interpreter for the perfect programming language. It is made in Pyth
 - Add string interpolation.
 - Handle Infinity lifetimes. 
 - Handle "const const const" variable declaraions.
+- Create `access_index` and `assign_index` for builtin types.
 
 Shouldn't be too tricky :D
 
