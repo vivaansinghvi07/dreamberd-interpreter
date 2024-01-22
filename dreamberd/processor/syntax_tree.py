@@ -9,43 +9,43 @@ class CodeStatement():
     pass
 
 class CodeStatementKeywordable(metaclass=ABCMeta):  # this is completely unnecessary lmao
-    keyword: str
+    keyword: Token
 
 # name name argname, argname, argname => {  ...
 # for single line arrows, this is:
 # name name argname, => expression !?
 @dataclass
 class FunctionDefinition(CodeStatement):
-    keywords: list[str]
-    name: str
-    args: list[str]
+    keywords: list[Token]
+    name: Token
+    args: list[Token]
     code: list[tuple[CodeStatement, ...]]
     is_async: bool
 
 # name name {
 @dataclass
 class ClassDeclaration(CodeStatement, CodeStatementKeywordable):
-    keyword: str
-    name: str 
+    keyword: Token
+    name: Token 
     code: list[tuple[CodeStatement, ...]]
 
 # : ... can be ignored
 # name name name: ... = something!?
 @dataclass
 class VariableDeclaration(CodeStatement):
-    name: str
-    modifiers: list[str]
+    name: Token
+    modifiers: list[Token]
     lifetime: Optional[str]
     expression: Union[list[Token], ExpressionTreeNode]
-    debug: bool
+    debug: int
     confidence: int  ## amount of !!! after the decl for priority
 
 # name []? = ...!
 @dataclass 
 class VariableAssignment(CodeStatement):
-    name: str
+    name: Token
     expression: Union[list[Token], ExpressionTreeNode]
-    debug: bool 
+    debug: int
     indexes: Union[list[list[Token]], list[ExpressionTreeNode]]  # list[Token] here is an expression not evaled yet
     confidence: int 
 
@@ -55,39 +55,39 @@ class VariableAssignment(CodeStatement):
 # can be both, and would have to be determined at runtime
 @dataclass
 class Conditional(CodeStatement, CodeStatementKeywordable):
-    keyword: str
+    keyword: Token
     expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
 
 # name expression !?
 @dataclass
-class ReturnStatement(CodeStatement, CodeStatementKeywordable):
-    keyword: str
+class ReturnStatement(CodeStatement):
+    keyword: Optional[Token]
     expression: Union[list[Token], ExpressionTreeNode]
-    debug: bool
+    debug: int
 @dataclass
 class DeleteStatement(CodeStatement, CodeStatementKeywordable):
-    keyword: str
-    name: str
-    debug: bool
+    keyword: Token
+    name: Token
+    debug: int
 
 # expression !?   < virtually indistinguishable from a return statement from a parsing perspective
 @dataclass
 class ExpressionStatement(CodeStatement):
     expression: Union[list[Token], ExpressionTreeNode]
-    debug: bool
+    debug: int
 
 # name name = expression { 
 @dataclass
 class WhenStatement(CodeStatement, CodeStatementKeywordable):
-    keyword: str
+    keyword: Token
     expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
 
 # name "string" expression!
 @dataclass 
 class AfterStatement(CodeStatement, CodeStatementKeywordable):
-    keyword: str
+    keyword: Token
     expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
 
@@ -190,7 +190,8 @@ def assert_proper_indentation(filename: str, tokens: list[Token], code: str) -> 
 def create_function_definition(filename: str, without_whitespace: list[Token], code: str, statements_inside_scope: list[tuple[CodeStatement, ...]]) -> tuple[CodeStatement, ...]:
 
     # parse this more to make sure it really really really can be a function
-    names_in_row = [], other_names = []
+    names_in_row: list[Token] = []
+    other_names: list[Token] = []
     looking_for_in_row = True
     for t in without_whitespace:
         if t.type == TokenType.FUNC_POINT:
@@ -198,9 +199,10 @@ def create_function_definition(filename: str, without_whitespace: list[Token], c
         if looking_for_in_row:
             if t.type != TokenType.NAME:
                 looking_for_in_row = False
-            names_in_row.append(t)
+            elif t.value:
+                names_in_row.append(t)
         else:
-            if t.type == TokenType.NAME:
+            if t.type == TokenType.NAME and t.value != "":
                 other_names.append(t)
             elif t.type != TokenType.COMMA:
                 raise_error_at_token(filename, code, "Invalid token in function declaration.", t)
@@ -210,7 +212,7 @@ def create_function_definition(filename: str, without_whitespace: list[Token], c
         raise_error_at_token(filename, code, "Insufficient keyword count in function declaration.", without_whitespace[0])
 
     is_async = len(names_in_row) == 4 
-    can_be_async =  len(names_in_row) == 3 and not other_names
+    can_be_async = len(names_in_row) == 3 and not other_names
     if not is_async and can_be_async: # can be one of two forms: 
 
         return FunctionDefinition(      # func name(arg))
@@ -269,36 +271,36 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
     # now finally, check for classes
     can_be_class = without_whitespace[0].type == TokenType.NAME and \
                    without_whitespace[1].type == TokenType.NAME and \
-                   without_whitespace[2].type == TokenType.R_CURLY
+                   without_whitespace[2].type == TokenType.L_CURLY
 
     # finally finally, check for the after or when statement -- this will have identical syntax to the conditional so there 
     # is no point in doing anything extra special
 
     # this dude is seperated to another function because the same code is reused in () => ... functions (no scope)
+    possibilities = []
     if can_be_function:
         return create_function_definition(filename, without_whitespace, code, statements_inside_scope)
 
-    possibilities = []
     if can_be_class:
 
         # build thing for the class statement
         possibilities.append(ClassDeclaration(
-            keyword = without_whitespace[0].value,
-            name = without_whitespace[1].value,
+            keyword = without_whitespace[0],
+            name = without_whitespace[1],
             code = statements_inside_scope
         ))
 
     possibilities.extend([
         Conditional(
-            keyword = without_whitespace[0].value,
+            keyword = without_whitespace[0],
             expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
             code = statements_inside_scope
         ), AfterStatement(
-            keyword = without_whitespace[0].value,
+            keyword = without_whitespace[0],
             expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
             code = statements_inside_scope
         ), WhenStatement(
-            keyword = without_whitespace[0].value,
+            keyword = without_whitespace[0],
             expression = tokens[int(tokens[0].type == TokenType.WHITESPACE) + 1 : scope_open_index],
             code = statements_inside_scope
         )
@@ -309,16 +311,16 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
     
     is_debug = tokens[-1].type == TokenType.QUESTION
     confidence = 0 if is_debug else len(tokens[-1].value)
+    debug_level = 0 if not is_debug else len(tokens[-1].value)
 
     # it's a function!!!!!!!!!!!!!!!!!
     if any(l := [t.type == TokenType.FUNC_POINT for t in tokens]):
         func_point_index = l.index(True)
         return create_function_definition(filename, without_whitespace, code, [(ReturnStatement(
-            keyword = "",
+            keyword = None,
             expression = tokens[func_point_index + 1 : -1],
-            debug = is_debug
+            debug = debug_level
         ),)])
-
     
     # let's see what can be what D:
     can_be_return = without_whitespace[0].type == TokenType.NAME
@@ -357,7 +359,7 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
     var_assignment_index.pop()  # the last one will always be empty
 
     # checking modifiers and lifetime for varianle declaration
-    names_in_row = []
+    names_in_row: list[Token] = []
     looking_for_lifetime, lifetime = False, None
     for t in without_whitespace:
         if not can_be_var_declaration or can_be_var_assignment:  # var assignment has a single name, therefore counteracts being decl
@@ -366,6 +368,7 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             if t.type != TokenType.NAME:
                 if t.type == TokenType.LESS_THAN:
                     looking_for_lifetime = True
+                    continue
                 else:
                     break
             names_in_row.append(t)
@@ -378,18 +381,18 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
     can_be_var_declaration &= 3 <= len(names_in_row) <= 4
     
     # make a list of all possible things, starting with plain expression 
-    possibilities: list[CodeStatement] = [ExpressionStatement(tokens[:-1], is_debug)] 
+    possibilities: list[CodeStatement] = [ExpressionStatement(tokens[:-1], debug_level)] 
     if can_be_return:
         possibilities.append(ReturnStatement(
-            keyword = without_whitespace[0].value,   # should be the same as tokens[0].value but this makes me feel safe
+            keyword = without_whitespace[0],   # should be the same as tokens[0].value but this makes me feel safe
             expression = tokens[1:-1],
-            debug = is_debug
+            debug = debug_level
         ))
     if can_be_delete:
         possibilities.append(DeleteStatement(
-            keyword = without_whitespace[0].value,
-            name = without_whitespace[1].value,
-            debug = is_debug
+            keyword = without_whitespace[0],
+            name = without_whitespace[1],
+            debug = debug_level
         ))
     if can_be_var_declaration:
         possibilities.append(VariableDeclaration(
@@ -397,14 +400,14 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             modifiers = names_in_row[:-1],
             lifetime = lifetime, 
             expression = tokens[tokens_is_equal.index(True) + 1 : -1],   # the end should be a puncutation
-            debug = is_debug, 
-            confidence = confidence
+            confidence = confidence,
+            debug = debug_level, 
         ))
     if can_be_var_assignment:
         possibilities.append(VariableAssignment(
-            name = without_whitespace[0].value,
+            name = without_whitespace[0],
             expression = tokens[tokens_is_equal.index(True) + 1 : -1],
-            debug = is_debug, 
+            debug = debug_level, 
             indexes = var_assignment_index,
             confidence = confidence
         ))

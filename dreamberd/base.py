@@ -9,12 +9,26 @@ ALPH_NUMS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_
 class InterpretationError(Exception):
     _           :(                                                                                              str)  # this is why i am the greatest programmer to ever live
 
+def debug_print(filename: str, code: str, message: str, token: Token) -> None:
+    line = token.line
+    num_carrots, num_spaces = len(token.value), token.col - len(token.value) + 1
+    debug_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
+                   f"  {code.split(chr(10))[line - 1]}\n" + \
+                   f" {num_spaces * ' '}{num_carrots * '^'}\n" + \
+                   f"\033[33m{message}\033[39m"
+    print('\n', debug_string, '\n', sep="")
+
+def debug_print_no_token(filename: str, message: str) -> None:
+    debug_string = f"\033[33m{filename}\033[39m\n\n" + \
+                   f"\033[33m{message}\033[39m"
+    print('\n', debug_string, '\n', sep="")
+
 def raise_error_at_token(filename: str, code: str, message: str, token: Token) -> None:
     line = token.line
     num_carrots, num_spaces = len(token.value), token.col - len(token.value) + 1
     error_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
                    f"  {code.split(chr(10))[line - 1]}\n" + \
-                   f"  {num_spaces * ' '}{num_carrots * '^'}\n" + \
+                   f" {num_spaces * ' '}{num_carrots * '^'}\n" + \
                    f"\033[31m{message}\033[39m"
     raise InterpretationError(error_string)
 
@@ -52,6 +66,8 @@ class TokenType(Enum):
     LESS_EQUAL = '<='
     GREATER_EQUAL = '>='
     NOT_EQUAL = ';='  #!@#!@#!@#
+    PIPE = '|'
+    AND = '&'
 
     WHITESPACE = '       '
     NAME = 'abcaosdijawef'  # i'm losing my mind
@@ -70,9 +86,9 @@ class OperatorType(Enum):
     GT  = '>'
     GE  = '>='
     LT  = '<'
-    LE  = '>'
-    OR  = '||'
-    AND = '&&'
+    LE  = '<='
+    OR  = '|'
+    AND = '&'
     COM = ','  # this is just here to seperate variables in a function 
     E   = '='
     EE  = '=='

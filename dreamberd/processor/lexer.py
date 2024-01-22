@@ -6,7 +6,7 @@ from dreamberd.base import Token, TokenType, ALPH_NUMS, raise_error_at_line
 # thanks : https://craftinginterpreters.com/scanning.html
 
 def add_to_tokens(token_list: list[Token], line: int, col: int, token: TokenType, value: Optional[str] = None):
-    token_list.append(Token(token, value or token.value, line, col))
+    token_list.append(Token(token, value if value is not None else token.value, line, col))
 
 def tokenize(filename: str, code: str) -> list[Token]:
     code += ' '  # adding a space here so i dont have to write 10 damn checks for out of bounds
@@ -25,6 +25,8 @@ def tokenize(filename: str, code: str) -> list[Token]:
             case ']': add_to_tokens(tokens, line_count, curr - start, TokenType.R_SQUARE)
             case '.': add_to_tokens(tokens, line_count, curr - start, TokenType.DOT)
             case ':': add_to_tokens(tokens, line_count, curr - start, TokenType.COLON)
+            case '|': add_to_tokens(tokens, line_count, curr - start, TokenType.PIPE)
+            case '&': add_to_tokens(tokens, line_count, curr - start, TokenType.AND)
             case ';': 
                 value = ';'
                 while code[curr + 1] == '=':
@@ -69,9 +71,13 @@ def tokenize(filename: str, code: str) -> list[Token]:
                     curr += 1
                 add_to_tokens(tokens, line_count, curr - start, TokenType.BANG, value)
             case '?': 
-                if code[curr + 1] == '?':
+                value = '?'
+                while code[curr + 1] == '?':
+                    value += '?'
+                    curr += 1
+                if len(value) > 4:
                     raise_error_at_line(filename, code, line_count, "User is too confused. Aborting due to trust issues.")  # heheheheheheh
-                add_to_tokens(tokens, line_count, curr - start, TokenType.QUESTION)
+                add_to_tokens(tokens, line_count, curr - start, TokenType.QUESTION, value)
             case '=': 
                 value = '='
                 if code[curr + 1] == '>':
@@ -102,12 +108,19 @@ def tokenize(filename: str, code: str) -> list[Token]:
                         raise_error_at_line(filename, code, line_count, "Invalid string. Starting parentheses do not match opening parentheses")
                 curr -= 1
                 add_to_tokens(tokens, line_count, curr - start, TokenType.STRING, value)
-            case ' ' | '\t' | '(' | ')':
-                value = code[curr] if code[curr] not in '()' else ' '
-                while curr + 1 < len(code) and code[curr + 1] in ' ()\t':
+            case ' ' | '\t' | '(' | ')': 
+                if code[curr] == '(' and curr + 1 < len(code) and code[curr + 1] == ')':
+                    add_to_tokens(tokens, line_count, curr - start, TokenType.WHITESPACE, '')
+                    add_to_tokens(tokens, line_count, curr - start, TokenType.NAME, '')  # please please please work
+                    add_to_tokens(tokens, line_count, curr - start, TokenType.WHITESPACE, '')
                     curr += 1
-                    value += code[curr] if code[curr] not in '()' else ' '
-                add_to_tokens(tokens, line_count, curr - start, TokenType.WHITESPACE, value)
+                else:
+                    value = code[curr] if code[curr] not in '()' else ' '
+                    while curr + 1 < len(code) and code[curr + 1] in ' ()\t':
+                        if code[curr + 1] not in "()":
+                            value += code[curr + 1]
+                        curr += 1
+                    add_to_tokens(tokens, line_count, curr - start, TokenType.WHITESPACE, value)
             case c:
                 value = c
                 while code[curr + 1] in ALPH_NUMS:

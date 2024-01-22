@@ -38,7 +38,7 @@ class DreamberdNamespaceable(metaclass=ABCMeta):
     namespace: dict[str, Union[Name, Variable]]
 
 @dataclass 
-class DreamberdFunction(Value):
+class DreamberdFunction(Value):  
     args: list[str]
     code: list[tuple[CodeStatement, ...]]
     is_async: bool
@@ -200,9 +200,10 @@ class Variable:
     prev_values: list[Value]
 
     def add_lifetime(self, value: Value, confidence: int, duration: int) -> None:
-        self.prev_values.append(self.value)
-        for i in range(len(self.lifetimes)):
-            if self.lifetimes[i].confidence == confidence:
+        for i in range(len(self.lifetimes) + 1):
+            if self.lifetimes[i].confidence == confidence or i == len(self.lifetimes):
+                if i == 0:
+                    self.prev_values.append(self.value)
                 self.lifetimes[i:i] = [VariableLifetime(value, duration, confidence)]
 
     def clear_outdated_lifetimes(self) -> None:
@@ -236,7 +237,7 @@ def all_function_keywords() -> list[str]:
     return list(keywords)
 
 FUNCTION_KEYWORDS = all_function_keywords()
-KEYWORDS = {kw: Name(kw, DreamberdKeyword(kw)) for kw in ['class', 'className', 'const', 'var', 'when', 'if', 'async', 'return', 'delete'] + FUNCTION_KEYWORDS}
+KEYWORDS = {kw: Name(kw, DreamberdKeyword(kw)) for kw in ['class', 'className', 'const', 'var', 'when', 'if', 'async', 'return', 'delete', 'await', 'previous'] + FUNCTION_KEYWORDS}
 
 ############################################
 ##           DREAMBERD BUILTINS           ##
@@ -274,7 +275,7 @@ def db_to_string(val: Value) -> DreamberdString:
         case DreamberdString():
             return_string = val.value
         case DreamberdList():
-            return_string = str([db_to_string(v) for v in val.values])
+            return_string = f"[{', '.join([db_to_string(v).value for v in val.values])}]"
         case DreamberdBoolean():
             return_string = "true"  if val.value else \
                             "maybe" if val.value is None else "false"
@@ -319,3 +320,13 @@ def db_to_number(val: Value) -> DreamberdNumber:
 def db_exit() -> None:
     exit()
 
+BUILTIN_FUNCTION_KEYWORDS = {
+    "new": Name("new", BuiltinFunction(1, db_new)),
+    "Map": Name("new", BuiltinFunction(0, db_map)),
+    "Boolean": Name("Boolean", BuiltinFunction(1, db_to_boolean)),
+    "String": Name("String", BuiltinFunction(1, db_to_string)),
+    "print": Name("print", BuiltinFunction(-1, db_print)),
+    "exit": Name("exit", BuiltinFunction(0, db_exit)),
+    "Number": Name("Number", BuiltinFunction(1, db_to_number))
+}
+KEYWORDS |= BUILTIN_FUNCTION_KEYWORDS

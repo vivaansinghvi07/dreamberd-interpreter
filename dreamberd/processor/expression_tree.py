@@ -1,5 +1,6 @@
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
+from typing import Optional
 
 from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, raise_error_at_token
 
@@ -67,6 +68,15 @@ class ValueNode(ExpressionTreeNode):
     def to_string(self, tabs: int = 0) -> str:
         return f"{'  ' * tabs}Value: {self.name_or_value}"
 
+def get_expr_first_token(expr: ExpressionTreeNode) -> Optional[Token]:
+    match expr:
+        case SingleOperatorNode(): return expr.operator 
+        case ExpressionNode(): return get_expr_first_token(expr.left) or get_expr_first_token(expr.right)
+        case FunctionNode(): return expr.name 
+        case ListNode(): return None if not expr.values else get_expr_first_token(expr.values[0])
+        case ValueNode(): return expr.name_or_value 
+        case IndexNode(): return get_expr_first_token(expr.value) or get_expr_first_token(expr.index)
+
 def build_expression_tree(filename: str, tokens: list[Token], code: str) -> ExpressionTreeNode:
     """ 
     This language has significant whitespace, so the biggest split happens where there is most space
@@ -87,13 +97,15 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
     
     # create a new list consisting and tokens and a brand new type: the list 
     tokens_without_whitespace = [token for token in tokens if token.type != TokenType.WHITESPACE]
+    if len(tokens_without_whitespace) == 2 and tokens_without_whitespace[0].type == TokenType.L_SQUARE and tokens_without_whitespace[1].type == TokenType.R_SQUARE:
+        return ListNode([])  # easy way out xD
     starts_with_whitespace = tokens[0].type == TokenType.WHITESPACE
     ends_with_whitespace = tokens[-1].type == TokenType.WHITESPACE
 
     # transform a list of tokens to include operators 
     # find the operator with the maximum whitespace between it and other things
     updated_list = [STR_TO_OPERATOR.get(token.value, token) for token in tokens]
-    max_width, max_index = 0, -1
+    max_width, max_index = -1, -1
     bracket_layers = 0
     for i in range(len(updated_list)):
         if tokens[i].type == TokenType.L_SQUARE:

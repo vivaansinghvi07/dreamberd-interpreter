@@ -1,6 +1,20 @@
-const const pi: List[Digit, Digit, Digit] = 314!
-println("Hello world")!
-   const const name = James?
-if (name ;== "james") {
-   print(':(')
+functi fibonacci (n, l) => {
+   const var sum = 0!
+   sum = 1!
+   const var i = 0!
+   when (i < n) {
+      sum = sum + previous sum!
+      i = i + 1!
+   }
+   when (i === n) {
+      l.push(sum)?
+   }
 }
+
+const var i = 0!
+const const l = []!
+when (i < 10) {
+   fibonacci(i, l)!
+   i = i + 1!
+}
+

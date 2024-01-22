@@ -8,15 +8,16 @@ import re
 import random
 from time import sleep
 from copy import deepcopy
+from pprint import pprint
 from threading import Thread
 from difflib import SequenceMatcher
 from typing import Optional, TypeAlias, Union
 
 from pynput import keyboard, mouse
 
-from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, raise_error_at_token
-from dreamberd.interpreter.builtin import FLOAT_TO_INT_PREC, KEYWORDS, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
-from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree
+from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_token
+from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
+from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
 from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExpressionStatement, FunctionDefinition, ReturnStatement, VariableAssignment, VariableDeclaration, WhenStatement
 
 # several "ratios" used in the approx equal function
@@ -64,12 +65,14 @@ def evaluate_normal_function(expr: FunctionNode, func: Union[DreamberdFunction, 
 def register_async_function(expr: FunctionNode, func: DreamberdFunction, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]) -> None:
     """ Adds a job to the async statements queue, which is accessed in the interpret_code_statements function. """
     args = [evaluate_expression(arg, namespaces, async_statements) for arg in expr.args]
-    if len(func.args) < len(args):
+    if len(func.args) > len(args):
         raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.", expr.name)
     function_namespaces = namespaces + [{name: Name(name, arg) for name, arg in zip(func.args, args)}]
     async_statements.append((func.code, function_namespaces))
 
-def declare_new_variable(name: str, value: Value, lifetime: Optional[str], confidence: int, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]):
+def declare_new_variable(statement: VariableDeclaration, value: Value, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]):
+
+    name, lifetime, confidence, debug = statement.name.value, statement.lifetime, statement.confidence, statement.debug
 
     if len(name.split('.')) > 1:
         raise InterpretationError("Cannot declare a variable with periods in the name.")
@@ -77,12 +80,12 @@ def declare_new_variable(name: str, value: Value, lifetime: Optional[str], confi
     is_lifetime_temporal = lifetime is not None and not lifetime[-1].isdigit()
     variable_duration = 100000000000 if is_lifetime_temporal or lifetime is None else int(lifetime)
     target_lifetime = VariableLifetime(value, variable_duration, confidence)
-    
+
     if v := namespaces[-1].get(name):
         if isinstance(v, Variable):
             target_var = v
-            for i in range(len(v.lifetimes)):
-                if v.lifetimes[i].confidence == confidence or i == len(v.lifetimes) - 1:
+            for i in range(len(v.lifetimes) + 1):
+                if v.lifetimes[i].confidence == confidence or i == len(v.lifetimes):
                     if i == 0:
                         v.prev_values.append(v.value)
                     v.lifetimes[i:i] = [target_lifetime]
@@ -93,15 +96,31 @@ def declare_new_variable(name: str, value: Value, lifetime: Optional[str], confi
         target_var = Variable(name, [target_lifetime], [])
         namespaces[-1][name] = target_var
 
+    match debug:
+        case 0: pass 
+        case 1: 
+            debug_print(filename, code, f"Setting {statement.name.value} to {db_to_string(value).value}", statement.name)
+        case 2: 
+            expr = get_built_expression(statement.expression)
+            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.", statement.name)
+        case 3: 
+            expr = get_built_expression(statement.expression)
+            names = gather_names_or_values(expr)
+            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}", statement.name)
+        case _: 
+            expr = get_built_expression(statement.expression)
+            names = gather_names_or_values(expr)
+            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}\nThe expression used to get this value is: \n{expr.to_string()}", statement.name)
+
     # check if there is a watcher for this name
     watchers_key = (name, id(namespaces[-1]))
     if watcher := name_watchers.get(watchers_key):
-        statement, stored_nexts, watcher_ns, promise = watcher
+        st, stored_nexts, watcher_ns, promise = watcher
         mod_name = get_modified_next_name(*watchers_key)
         watcher_ns[-1][mod_name] = Name(mod_name, value)  # add the value to the uppermost namespace
         stored_nexts.remove(watchers_key)                   # remove the name from the set containing remaining names
         if not stored_nexts:  # not waiting on anybody else, execute the code
-            interpret_name_watching_statement(statement, watcher_ns, promise, async_statements)
+            interpret_name_watching_statement(st, watcher_ns, promise, async_statements)
         del name_watchers[watchers_key]             # stop watching this name
         
     # if we're dealing with seconds just sleep in another thread and remove the variable lifetime
@@ -115,12 +134,34 @@ def declare_new_variable(name: str, value: Value, lifetime: Optional[str], confi
                     del target_var.lifetimes[i]
         Thread(target=remove_lifetime, args=(lifetime, target_var, target_lifetime)).start()
 
-def assign_variable(name: str, indexes: list[Value], confidence: int, new_value: Value, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]):
+def assign_variable(statement: VariableAssignment, indexes: list[Value], new_value: Value, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]):
+
+    name, confidence, debug = statement.name.value, statement.confidence, statement.debug
         
     var, ns = get_name_and_namespace_from_namespaces(name, namespaces)
     if not isinstance(var, Variable):
         raise InterpretationError("Attempted to set name that is not a variable.")
-    
+ 
+    match debug:
+        case 0: pass 
+        case 1: 
+            debug_print(filename, code, f"Setting {statement.name.value}{''.join([f'[{db_to_string(val).value}]' for val in indexes])} to {db_to_string(new_value).value}", statement.name)
+        case 2:
+            expr = get_built_expression(statement.expression)
+            names = gather_names_or_values(expr)
+            debug_print(filename, code, f"Setting {statement.name.value}{''.join([f'[{db_to_string(val).value}]' for val in indexes])} to {db_to_string(new_value).value}\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}", statement.name)
+        case 3: 
+            expr = get_built_expression(statement.expression)
+            names = gather_names_or_values(expr)
+            debug_print(filename, code, f"Setting {statement.name.value}{''.join([f'[{db_to_string(val).value}]' for val in indexes])} to {db_to_string(new_value).value}\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}\nThe expression used to get this value is: \n{expr.to_string()}", statement.name)
+        case _:
+            expr = get_built_expression(statement.expression)
+            index_exprs = [get_built_expression(ex) for ex in statement.indexes]
+            names = gather_names_or_values(expr)
+            for ex in index_exprs:
+                names |= gather_names_or_values(ex)
+            debug_print(filename, code, f"Setting {statement.name.value}{''.join([f'[{db_to_string(val).value}]' for val in indexes])} to {db_to_string(new_value).value}\nThe value of each name in the program is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}\nThe expression used to get this value is: \n{expr.to_string()}\nThe expression used to get the indexes are as follows: \n{(chr(10) * 2).join([ex.to_string(1) for ex in index_exprs])}", statement.name)
+
     if indexes:
 
         # goes down the list until it can assign something in the list
@@ -130,7 +171,8 @@ def assign_variable(name: str, indexes: list[Value], confidence: int, new_value:
             index = remaining_indexes.pop(0) 
             if not remaining_indexes:  # perform actual assignment here
                 value_to_modify.assign_index(index, new_value)
-            assign_variable_helper(value_to_modify.access_index(index), new_value, remaining_indexes)
+            else:
+                assign_variable_helper(value_to_modify.access_index(index), new_value, remaining_indexes)
 
         assign_variable_helper(var.value, new_value, indexes)
                
@@ -139,12 +181,12 @@ def assign_variable(name: str, indexes: list[Value], confidence: int, new_value:
     # check if there is anything watching this value
     watchers_key = (name.split('.')[-1], id(ns))  # this shit should be a seperate function
     if watcher := name_watchers.get(watchers_key):
-        statement, stored_nexts, watcher_ns, promise = watcher
+        st, stored_nexts, watcher_ns, promise = watcher
         mod_name = get_modified_next_name(*watchers_key)
         watcher_ns[-1][mod_name] = Name(mod_name, new_value)  # add the value to the uppermost namespace
         stored_nexts.remove(watchers_key)                   # remove the name from the set containing remaining names
         if not stored_nexts:  # not waiting on anybody else, execute the code
-            interpret_name_watching_statement(statement, watcher_ns, promise, async_statements)
+            interpret_name_watching_statement(st, watcher_ns, promise, async_statements)
         del name_watchers[watchers_key]             # stop watching this name  
 
 def get_value_from_promise(val: DreamberdPromise) -> Value:
@@ -155,7 +197,7 @@ def get_value_from_promise(val: DreamberdPromise) -> Value:
 def get_name_from_namespaces(name: str, namespaces: list[Namespace]) -> Optional[Union[Variable, Name]]:
     """ This is called when we are sure that the value is a name. """
     if len(name_split := name.split('.')) == 1:
-        for ns in namespaces:
+        for ns in reversed(namespaces):
             if (v := ns.get(name)) is not None:
                 return v
     else:
@@ -174,7 +216,7 @@ def get_name_from_namespaces(name: str, namespaces: list[Namespace]) -> Optional
 def get_name_and_namespace_from_namespaces(name: str, namespaces: list[Namespace]) -> tuple[Optional[Union[Variable, Name]], Optional[Namespace]]:
     """ This is the same as the function defined above, except it also returns the namespace in which the name was found. """
     if len(name_split := name.split('.')) == 1:
-        for ns in namespaces:
+        for ns in reversed(namespaces):
             if (v := ns.get(name)) is not None:
                 return v, ns
     else:
@@ -420,13 +462,17 @@ def perform_two_value_operation(left: Value, right: Value, operator: OperatorTyp
                 if operator == OperatorType.EEEE:
                     return is_really_really_equal(left, right)
                 return db_not(is_really_really_equal(left, right))
-            case OperatorType.GE | OperatorType.LE:
-                if is_really_equal(left, right):
-                    return DreamberdBoolean(True)
+            case OperatorType.GT | OperatorType.LE:
+                is_eq = is_really_equal(left, right)
+                is_less = is_less_than(left, right)
+                is_le = False
+                match is_eq.value, is_less.value:  # performs the OR operation
+                    case (True, _) | (_, True): is_le = True
+                    case (None, _) | (_, None): is_le = None 
                 if operator == OperatorType.LE:
-                    return is_less_than(left, right)
-                return db_not(is_less_than(left, right))
-            case OperatorType.LT, OperatorType.GT:
+                    return DreamberdBoolean(is_le)
+                return db_not(DreamberdBoolean(is_le))
+            case OperatorType.LT | OperatorType.GE:  
                 if operator == OperatorType.LT:
                     return is_less_than(left, right)
                 return db_not(is_less_than(left, right))
@@ -444,6 +490,25 @@ def get_value_from_namespaces(name_or_value: str, namespaces: list[Namespace]) -
         return v.value
     return determine_non_name_value(name_or_value)
 
+def print_expression_debug(debug: int, expr: Union[list[Token], ExpressionTreeNode], value: Value, namespaces: list[Namespace]) -> None:
+    expr = get_built_expression(expr)
+    msg = None
+    match debug:
+        case 0: pass 
+        case 1: 
+            msg = f"Expression evaluates to value {db_to_string(value).value}."
+        case 2: 
+            names = gather_names_or_values(expr)
+            msg = f"Expression evaluates to value {db_to_string(value).value}.\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}"
+        case _: 
+            names = gather_names_or_values(expr)
+            msg = f"Expression evaluates to value {db_to_string(value).value}.\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}\nThe expression used to get this value is: \n{expr.to_string()}"
+
+    if not msg: return
+    if t := get_expr_first_token(expr):
+        debug_print(filename, code, msg, t)
+    else: debug_print_no_token(filename, msg)
+
 def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]) -> Value:
 
     expr = get_built_expression(expr)
@@ -459,18 +524,32 @@ def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces
     
             # check the thing in the await symbol. if awaiting a single function that is async, evaluate it as not async
             force_execute_sync = False
-            if isinstance(func.value, DreamberdKeyword) and func.value.value == "await":
-                if len(expr.args) != 1:
-                    raise_error_at_token(filename, code, "Expected only one argument for await function.", expr.name); raise
-                if not isinstance(expr.args[0], FunctionNode):
-                    raise_error_at_token(filename, code, "Expected argument of await function to be a function call.", expr.name); raise
-                force_execute_sync = True 
-                
-                # check for None again
-                expr = expr.args[0]
-                func = get_name_from_namespaces(expr.name.value, namespaces)
-                if func is None:  # the other check happens in the next statement
-                    raise_error_at_token(filename, code, "Cannot find token in namespaces.", expr.name); raise
+            if isinstance(func.value, DreamberdKeyword):
+                if func.value.value == "await":
+                    if len(expr.args) != 1:
+                        raise_error_at_token(filename, code, "Expected only one argument for await function.", expr.name); raise
+                    if not isinstance(expr.args[0], FunctionNode):
+                        raise_error_at_token(filename, code, "Expected argument of await function to be a function call.", expr.name); raise
+                    force_execute_sync = True 
+                    
+                    # check for None again
+                    expr = expr.args[0]
+                    func = get_name_from_namespaces(expr.name.value, namespaces)
+                    if func is None:  # the other check happens in the next statement
+                        raise_error_at_token(filename, code, "Cannot find token in namespaces.", expr.name); raise
+
+                elif func.value.value == "previous":
+                    if len(expr.args) != 1:
+                        raise_error_at_token(filename, code, "Expected only one argument for previous function.", expr.name); raise
+                    if not isinstance(expr.args[0], ValueNode):
+                        raise_error_at_token(filename, code, "Expected argument of previous function to be a variable.", expr.name); raise
+                    force_execute_sync = True 
+                    
+                    # check for None again
+                    val = get_name_from_namespaces(expr.args[0].name_or_value.value, namespaces)
+                    if not isinstance(val, Variable):
+                        raise_error_at_token(filename, code, "Expected argument of previous function to be a defined variable.", expr.args[0].name_or_value); raise
+                    return val.prev_values[-1]
 
             if not isinstance(func.value, (BuiltinFunction, DreamberdFunction)):
                 raise_error_at_token(filename, code, "Attempted function call on non-function value.", expr.name); raise
@@ -487,6 +566,8 @@ def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces
             return DreamberdList([evaluate_expression(x, namespaces, async_statements) for x in expr.values])
 
         case ValueNode():  # done :)
+            if expr.name_or_value.type == TokenType.STRING: 
+                return DreamberdString(expr.name_or_value.value)
             return get_value_from_namespaces(expr.name_or_value.value, namespaces)
 
         case IndexNode():  # done :)
@@ -612,28 +693,34 @@ def save_previous_values_next_expr(expr_to_modify: ExpressionTreeNode, nexts: se
     saved_namespace: Namespace = {}
     match expr_to_modify:
         case ValueNode():
+            if expr_to_modify.name_or_value.type == TokenType.STRING:
+                return {}
             name = expr_to_modify.name_or_value.value
+            if name not in nexts:
+                return {}
             val = get_name_from_namespaces(name, namespaces)
             if not val:
-                raise InterpretationError("Attempting to access undefined variable.")
+                val = Name("", determine_non_name_value(name))
             mod_name = get_modified_prev_name(name)
-            saved_namespace[mod_name] = Name(mod_name, val.value)
+            return {mod_name: Name(mod_name, val.value)}
         case ExpressionNode():
             left_ns = save_previous_values_next_expr(expr_to_modify.left, nexts, namespaces)
             right_ns = save_previous_values_next_expr(expr_to_modify.right, nexts, namespaces)
-            saved_namespace |= left_ns | right_ns
+            return left_ns | right_ns
         case IndexNode():
             value_ns = save_previous_values_next_expr(expr_to_modify.value, nexts, namespaces)
             index_ns = save_previous_values_next_expr(expr_to_modify.index, nexts, namespaces)
-            saved_namespace |= value_ns | index_ns
+            return value_ns | index_ns
         case ListNode():
             for ex in expr_to_modify.values:
                 saved_namespace |= save_previous_values_next_expr(ex, nexts, namespaces)
+            return saved_namespace
         case FunctionNode():
             for arg in expr_to_modify.args:
                 saved_namespace |= save_previous_values_next_expr(arg, nexts, namespaces)
+            return saved_namespace
         case SingleOperatorNode():
-            saved_namespace |= save_previous_values_next_expr(expr_to_modify.expression, nexts, namespaces)
+            return save_previous_values_next_expr(expr_to_modify.expression, nexts, namespaces)
     return saved_namespace
 
 def determine_statement_type(possible_statements: tuple[CodeStatement, ...], namespaces: list[Namespace]) -> Optional[CodeStatement]:
@@ -642,33 +729,39 @@ def determine_statement_type(possible_statements: tuple[CodeStatement, ...], nam
         WhenStatement: {'when'},
         AfterStatement: {'after'},
         ClassDeclaration: {'class', 'className'},
-        ReturnStatement: {'return'},
         DeleteStatement: {'delete'}
     }
+
     for st in possible_statements:
         if isinstance(st, CodeStatementKeywordable):
-            val = get_name_from_namespaces(st.keyword, namespaces)
+            val = get_name_from_namespaces(st.keyword.value, namespaces)
             if val is not None and isinstance(val.value, DreamberdKeyword) and val.value.value in instance_to_keywords[type(st)]:
                 return st
+        elif isinstance(st, ReturnStatement):
+            if st.keyword is None:
+                return st 
+            val = get_name_from_namespaces(st.keyword.value, namespaces)
+            if val and isinstance(val.value, DreamberdKeyword) and val.value.value == "return":
+                return st 
         elif isinstance(st, FunctionDefinition):  # allow for async and normal function definitions
             if len(st.keywords) == 1:
-                val = get_name_from_namespaces(st.keywords[0], namespaces)
-                if val and isinstance(val.value, DreamberdKeyword) and re.match(r"f?u?n?c?t?i?o?n?", val.value.value):
+                val = get_name_from_namespaces(st.keywords[0].value, namespaces)
+                if val and isinstance(val.value, DreamberdKeyword) and re.match(r"^f?u?n?c?t?i?o?n?$", val.value.value):
                     return st
             elif len(st.keywords) == 2:
-                val = get_name_from_namespaces(st.keywords[0], namespaces)
-                other_val = get_name_from_namespaces(st.keywords[1], namespaces)
+                val = get_name_from_namespaces(st.keywords[0].value, namespaces)
+                other_val = get_name_from_namespaces(st.keywords[1].value, namespaces)
                 if val and other_val and isinstance(val.value, DreamberdKeyword) and isinstance(other_val.value, DreamberdKeyword) \
-                   and re.match(r"f?u?n?c?t?i?o?n?", val.value.value) and other_val.value.value == 'async':
+                   and re.match(r"^f?u?n?c?t?i?o?n?$", other_val.value.value) and val.value.value == 'async':
                     return st
         elif isinstance(st, VariableDeclaration):  # allow for const const const and normal declarations
             if len(st.modifiers) == 2:
-                if all([(val := get_name_from_namespaces(mod, namespaces)) is not None and 
+                if all([(val := get_name_from_namespaces(mod.value, namespaces)) is not None and 
                     isinstance(val.value, DreamberdKeyword) and val.value.value in {'const', 'var'}
                     for mod in st.modifiers]):
                     return st
             elif len(st.modifiers) == 3:
-                if all([(val := get_name_from_namespaces(mod, namespaces)) is not None and 
+                if all([(val := get_name_from_namespaces(mod.value, namespaces)) is not None and 
                     isinstance(val.value, DreamberdKeyword) and val.value.value == 'const' 
                     for mod in st.modifiers]):
                     return st
@@ -774,25 +867,26 @@ def interpret_name_watching_statement(statement: CodeStatementWithExpression, na
                 raise InterpretationError("Something went wrong.")
             promise.value = expr_val  # simply change the promise to that value as the return statement already returned a promise
         case VariableDeclaration():
-            declare_new_variable(statement.name, expr_val, statement.lifetime, statement.confidence, namespaces, async_statements)
+            declare_new_variable(statement, expr_val, namespaces, async_statements)
         case VariableAssignment():
-            assign_variable(statement.name, index_vals, statement.confidence, expr_val, namespaces, async_statements)
+            assign_variable(statement, index_vals, expr_val, namespaces, async_statements)
         case Conditional():
             execute_conditional(expr_val, statement.code, namespaces)
         case AfterStatement():
             execute_after_statement(expr_val, statement.code, namespaces)
-        case ExpressionStatement(): pass  # literally no action required because the expression was already evaluated
+        case ExpressionStatement(): 
+            print_expression_debug(statement.debug, statement.expression, expr_val, namespaces)
 
 def clear_temp_namespace(namespaces: list[Namespace], temp_namespace: Namespace) -> None:
     for key in temp_namespace:
         del namespaces[-1][key]
 
 # simply execute the conditional inside a new scope
-def execute_conditional(condition: Value, statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace]) -> None:
+def execute_conditional(condition: Value, statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace]) -> Optional[Value]:
     condition = db_to_boolean(condition)
     execute = condition.value == True if condition.value is not None else random.random() < 0.50
     if execute:  
-        interpret_code_statements(statements_inside_scope, namespaces + [{}], [])  # empty scope and async statements, just for this :)
+        return interpret_code_statements(statements_inside_scope, namespaces + [{}], [])  # empty scope and async statements, just for this :)
 
 # this is the equaivalent of an event listener
 def get_mouse_event_object(x: int, y: int, button: mouse.Button, event: str) -> DreamberdObject:
@@ -888,7 +982,7 @@ def execute_when_statement(condition: Union[list[Token], ExpressionTreeNode], st
 
     def running_thread(condition: ExpressionTreeNode, statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]):
         names_to_watch = gather_names_or_values(condition)
-        old_names_values = [get_value_from_namespaces(name, namespaces) for name in names_to_watch]
+        old_names_values = [None for _ in names_to_watch]
         while True:  # :DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
             sleep(0.05)
             if old_names_values != (old_names_values := [get_value_from_namespaces(name, namespaces) for name in names_to_watch]):  # only execute when new values differen 
@@ -896,7 +990,7 @@ def execute_when_statement(condition: Union[list[Token], ExpressionTreeNode], st
 
     Thread(target=running_thread, args=(condition, statements_inside_scope, namespaces, async_statements)).start()
     
-def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]):
+def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]) -> Optional[Value]:
 
     # build a list of expressions that are modified to allow for the next keyword
     expressions_to_check: list[Union[list[Token], ExpressionTreeNode]] = []
@@ -936,33 +1030,35 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
         namespaces[-1] |= (prev_namespace := prev_namespace | wait_for_async_nexts(all_async_nexts, namespaces))
 
     # finally actually execute the damn thing
+    retval = None
     match statement:
         case VariableAssignment():
             assign_variable(
-                statement.name, [evaluate_expression(expr, namespaces, async_statements) for expr in statement.indexes], 
-                statement.confidence, evaluate_expression(statement.expression, namespaces, async_statements),
+                statement, [evaluate_expression(expr, namespaces, async_statements) for expr in statement.indexes], 
+                evaluate_expression(statement.expression, namespaces, async_statements),
                 namespaces, async_statements
             )
 
         case FunctionDefinition():
-            namespaces[-1][statement.name] = Name(statement.name, DreamberdFunction(
-                args = statement.args,
+            namespaces[-1][statement.name.value] = Name(statement.name.value, DreamberdFunction(
+                args = [arg.value for arg in statement.args],
                 code = statement.code,
                 is_async = statement.is_async
             ))
 
-        case DeleteStatement():
-            val, ns = get_name_and_namespace_from_namespaces(statement.name, namespaces)
+        case DeleteStatement(): 
+            val, ns = get_name_and_namespace_from_namespaces(statement.name.value, namespaces)
             if val and ns:
-                del ns[statement.name]
-            deleted_values.add(determine_non_name_value(statement.name))
+                del ns[statement.name.value]
+            deleted_values.add(determine_non_name_value(statement.name.value))
 
         case ExpressionStatement():
-            evaluate_expression(statement.expression, namespaces, async_statements)
+            val = evaluate_expression(statement.expression, namespaces, async_statements)
+            print_expression_debug(statement.debug, statement.expression, val, namespaces)
 
         case Conditional():
             condition = db_to_boolean(evaluate_expression(statement.expression, namespaces, async_statements))
-            execute_conditional(condition, statement.code, namespaces)
+            retval = execute_conditional(condition, statement.code, namespaces)
 
         case AfterStatement():  # create event listener
             event = evaluate_expression(statement.expression, namespaces, async_statements)
@@ -972,9 +1068,9 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
             execute_when_statement(statement.expression, statement.code, namespaces, async_statements)
             
         case VariableDeclaration():
-            declare_new_variable(statement.name, evaluate_expression(
+            declare_new_variable(statement, evaluate_expression(
                 statement.expression, namespaces, async_statements
-            ), statement.lifetime, statement.confidence, namespaces, async_statements)
+            ), namespaces, async_statements)
 
         case ClassDeclaration(): 
 
@@ -990,19 +1086,20 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
                 if instance_made:
                     raise InterpretationError(f"Already made instance of the class \"{class_name}\".")
                 instance_made = True 
-                if constructor := class_namespace.get(class_name):
+                if constructor := class_namespace.get(class_name.value):
                     if not isinstance(func := constructor.value, DreamberdFunction):
                         raise InterpretationError("Cannot create class variable with the same name as the class.")
                     if len(func.args) > len(args):
                         raise InterpretationError(f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.")
                     new_namespace: Namespace = {name: Name(name, arg) for name, arg in zip(func.args, args)}
                     interpret_code_statements(func.code, namespaces + [new_namespace], [])
-                    del class_namespace[class_name]  # remove the constructor
-                return DreamberdObject(class_name, class_namespace)
+                    del class_namespace[class_name.value]  # remove the constructor
+                return DreamberdObject(class_name.value, class_namespace)
 
-            namespaces[-1][statement.name] = Name(statement.name, BuiltinFunction(-1, class_object_closure))
+            namespaces[-1][statement.name.value] = Name(statement.name.value, BuiltinFunction(-1, class_object_closure))
 
     clear_temp_namespace(namespaces, prev_namespace)
+    return retval
 
 def fill_class_namespace(statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], class_namespace: Namespace, async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]) -> None:
     for possible_statements in statements:
@@ -1011,8 +1108,8 @@ def fill_class_namespace(statements: list[tuple[CodeStatement, ...]], namespaces
             case FunctionDefinition():
                 if "this" in statement.args:
                     raise InterpretationError("\"this\" keyword not allowed in class function declaration arguments.")
-                class_namespace[statement.name] = Name(statement.name, DreamberdFunction(
-                    args = ["this"] + statement.args,    # i need to somehow make the this keyword actually do something
+                class_namespace[statement.name.value] = Name(statement.name.value, DreamberdFunction(
+                    args = ["this"] + [arg.value for arg in statement.args],    # i need to somehow make the this keyword actually do something
                     code = statement.code,
                     is_async = statement.is_async
                 ))
@@ -1020,9 +1117,19 @@ def fill_class_namespace(statements: list[tuple[CodeStatement, ...]], namespaces
 
                 # why the fuck are my function calls so long i really need some globals  
                 var_expr = evaluate_expression(statement.expression, namespaces, async_statements)
-                declare_new_variable(statement.name, var_expr, statement.lifetime, statement.confidence, [class_namespace], async_statements)
+                declare_new_variable(statement, var_expr, [class_namespace], async_statements)
             case _:
                 raise InterpretationError(f"Unexpected statement of type {type(statement).__name__} in class declaration.")
+
+# cleanup out of date variables
+def decrement_variable_lifetimes(namespaces: list[Namespace]) -> None:
+    for ns in namespaces: 
+        for v in ns.values():
+            if not isinstance(v, Variable):
+                continue 
+            for l in v.lifetimes:
+                l.lines_left -= 1 
+            v.clear_outdated_lifetimes()
 
 # if a return statement is found, this will return the expression evaluated at the return. otherwise, it will return None
 # this is done to allow this function to be called when evaluating dreamberd functions
@@ -1030,13 +1137,14 @@ def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], names
 
     curr = 0
     while curr < len(statements): 
+        decrement_variable_lifetimes(namespaces)
         statement = determine_statement_type(statements[curr], namespaces)
 
         # if no statement found -i.e. the user did something wrong
         if statement is None:
+            pprint(statements[curr])
             raise InterpretationError("Error parsing statement. Try again.")
         elif isinstance(statement, ReturnStatement):  # if working with a return statement, either return a promise or a value
-            # todoo oo odo oo doooooo
             expr, normal_nexts, async_nexts = handle_next_expressions(get_built_expression(statement.expression), namespaces)
             prev_namespaces = save_previous_values_next_expr(expr, async_nexts | {s[0] for s in normal_nexts}, namespaces)
             if normal_nexts:
@@ -1048,8 +1156,11 @@ def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], names
             retval = evaluate_expression(expr, namespaces, async_statements)
             clear_temp_namespace(namespaces, prev_namespaces)
             return retval
-
-        interpret_statement(statement, namespaces, async_statements)
+        
+        # otherwise interpret the other statement, if there is a return value then return
+        retval = interpret_statement(statement, namespaces, async_statements)
+        if retval: return retval
+        curr += 1
 
         # emulate taking turns running all the "async" functions
         for async_st, async_ns in async_statements:  
@@ -1069,7 +1180,3 @@ def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _dele
     name_watchers = _name_watchers 
     deleted_values = _deleted_values
 
-def main(filename: str, code: str, statements: list[tuple[CodeStatement, ...]]) -> None:  # idk what else to call this
-    load_globals(filename, code, {}, set())
-    namespace = KEYWORDS.copy()
-    interpret_code_statements(statements, [namespace], [])
