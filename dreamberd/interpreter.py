@@ -556,6 +556,7 @@ def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces
             
             if len(name_split := expr.name.value.split('.')) > 1:
                 caller = '.'.join(name_split[:-1])
+                expr = deepcopy(expr)   # we create a copy of the expression as to not modify it badly
                 expr.args.insert(0, ValueNode(Token(TokenType.NAME, caller, expr.name.line, expr.name.col)))  # artificially put this here, as this is the imaginary "this" keyword
             if isinstance(func.value, DreamberdFunction) and func.value.is_async and not force_execute_sync:
                 register_async_function(expr, func.value, namespaces, async_statements)
@@ -702,6 +703,7 @@ def save_previous_values_next_expr(expr_to_modify: ExpressionTreeNode, nexts: se
             if not val:
                 val = Name("", determine_non_name_value(name))
             mod_name = get_modified_prev_name(name)
+            expr_to_modify.name_or_value.value = mod_name
             return {mod_name: Name(mod_name, val.value)}
         case ExpressionNode():
             left_ns = save_previous_values_next_expr(expr_to_modify.left, nexts, namespaces)
@@ -984,10 +986,12 @@ def execute_when_statement(condition: Union[list[Token], ExpressionTreeNode], st
         names_to_watch = gather_names_or_values(condition)
         old_names_values = [None for _ in names_to_watch]
         while True:  # :DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-            sleep(0.05)
             if old_names_values != (old_names_values := [get_value_from_namespaces(name, namespaces) for name in names_to_watch]):  # only execute when new values differen 
+                print("detected change:" , old_names_values)
                 execute_conditional(evaluate_expression(condition, namespaces, async_statements), statements, namespaces)
-
+            else:
+                sleep(0.01)  # if they changed, code can continue normally
+ 
     Thread(target=running_thread, args=(condition, statements_inside_scope, namespaces, async_statements)).start()
     
 def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], async_statements: list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]) -> Optional[Value]:
@@ -1011,7 +1015,7 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
     for expr in next_filtered_exprs:
         prev_namespace |= save_previous_values_next_expr(expr, all_nexts, namespaces)
 
-    # we replace the expression stored in each statement with the newly built one
+    # we replace the expression stored in each statement with the newly built one  -- TODO: consider changing this as to not override expressions
     match statement:
         case VariableAssignment():
             statement.expression = next_filtered_exprs[0]
