@@ -26,6 +26,9 @@ def db_not(x: DreamberdBoolean) -> DreamberdBoolean:
 class Value():  # base class for shit  
     pass
 
+class DreamberdMutable():  # mutable values
+    pass
+
 class DreamberdIndexable(metaclass=ABCMeta):
     
     @abstractmethod 
@@ -47,9 +50,10 @@ class DreamberdFunction(Value):
 class BuiltinFunction(Value):
     arg_count: int
     function: Callable
+    modifies_caller: bool = False
 
 @dataclass 
-class DreamberdList(Value, DreamberdIndexable, DreamberdNamespaceable):
+class DreamberdList(Value, DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable):
     values: list[Value]
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
@@ -72,8 +76,8 @@ class DreamberdList(Value, DreamberdIndexable, DreamberdNamespaceable):
 
         if not is_update:
             self.namespace = {
-                'push': Name('push', BuiltinFunction(2, db_list_push)),
-                'pop': Name('pop', BuiltinFunction(2, db_list_pop)),
+                'push': Name('push', BuiltinFunction(2, db_list_push, True)),
+                'pop': Name('pop', BuiltinFunction(2, db_list_pop, True)),
                 'length': Name('length', DreamberdNumber(len(self.values))),
             }
         elif is_update:
@@ -103,7 +107,7 @@ class DreamberdList(Value, DreamberdIndexable, DreamberdNamespaceable):
             self.create_namespace(True)
 
 @dataclass(unsafe_hash=True)
-class DreamberdNumber(Value, DreamberdIndexable):
+class DreamberdNumber(Value, DreamberdIndexable, DreamberdMutable):
     value: Union[int, float]
 
     def access_index(self, index: Value) -> Value:
@@ -118,25 +122,16 @@ class DreamberdNumber(Value, DreamberdIndexable):
 
 @dataclass(unsafe_hash=True)
 class DreamberdString(Value, DreamberdIndexable, DreamberdNamespaceable):
-    value: str 
-    namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
+    value: str = field(hash=True)
+    namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict, hash=False)
 
     def __post_init__(self):
         self.create_namespace()
 
-    def create_namespace(self, is_update: bool = False):
-        def db_str_push(self, val: Value) -> None:
-            self.value += db_to_string(val).value
-
-        if not is_update:
-            self.namespace = {
-                'push': Name('push', BuiltinFunction(2, db_str_push)),
-                'length': Name('length', DreamberdNumber(len(self.value))),
-            }
-        elif is_update:
-            self.namespace |= {
-                'length': Name('length', DreamberdNumber(len(self.value))),
-            }
+    def create_namespace(self):
+        self.namespace |= {
+            'length': Name('length', DreamberdNumber(len(self.value))),
+        }
 
     def access_index(self, index: Value) -> Value:
         pass
@@ -171,11 +166,6 @@ class DreamberdMap(Value, DreamberdIndexable):
 class DreamberdKeyword(Value):
     value: str
 
-# @dataclass 
-# class NextVariable:
-#     value: Optional[Value]
-#     waiting_loc: Optional[Value]
-
 @dataclass 
 class DreamberdPromise(Value):
     value: Optional[Value]
@@ -184,8 +174,6 @@ class DreamberdPromise(Value):
 class Name:
     name: str
     value: Value
-    # next_listener: Optional[NextVariable] = None
-    # previous_value: Optional[Value] = None
 
 @dataclass 
 class VariableLifetime:
