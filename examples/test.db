@@ -1,0 +1,33 @@
+const const counter = 100!
+
+fn applyCA(l) => {
+   if (counter === 0) {
+      return!
+   }
+   counter = counter + 1!
+   const const l = l!
+   const var new_l = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]!
+   const var index = 0!
+   when (index < l.length-2) {
+      const const total_alive = l[index-1] + l[index] + l[index + 1]!
+      if (total_alive == 1) {
+         new_l[index] = 1!
+      } 
+      if (total_alive == 3) {
+         new_l[index] = 0!
+      } 
+      index = index + 1!
+   }
+   const var new_index = -1! 
+   when (new_index < l.length-1  &  index == l.length-2) {
+      l[new_index] = new_l[new_index]!
+      new_index = new_index + 1!
+   }
+   when (new_index == l.length-1) {
+      print l!
+      applyCA l!
+   }
+}
+
+const var l: Int9[] = [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]!
+applyCA l!
