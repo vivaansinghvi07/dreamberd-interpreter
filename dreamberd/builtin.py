@@ -26,10 +26,10 @@ def db_not(x: DreamberdBoolean) -> DreamberdBoolean:
 class Value():  # base class for shit  
     pass
 
-class DreamberdMutable():  # mutable values
+class DreamberdMutable(Value):  # mutable values
     pass
 
-class DreamberdIndexable(metaclass=ABCMeta):
+class DreamberdIndexable(Value, metaclass=ABCMeta):
     
     @abstractmethod 
     def access_index(self, index: Value) -> Value: pass
@@ -37,7 +37,7 @@ class DreamberdIndexable(metaclass=ABCMeta):
     @abstractmethod
     def assign_index(self, index: Value, val: Value) -> None: pass
 
-class DreamberdNamespaceable(metaclass=ABCMeta):
+class DreamberdNamespaceable(Value, metaclass=ABCMeta):
     namespace: dict[str, Union[Name, Variable]]
 
 @dataclass 
@@ -53,7 +53,7 @@ class BuiltinFunction(Value):
     modifies_caller: bool = False
 
 @dataclass 
-class DreamberdList(Value, DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable):
+class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable):
     values: list[Value]
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
@@ -107,7 +107,7 @@ class DreamberdList(Value, DreamberdIndexable, DreamberdNamespaceable, Dreamberd
             self.create_namespace(True)
 
 @dataclass(unsafe_hash=True)
-class DreamberdNumber(Value, DreamberdIndexable, DreamberdMutable):
+class DreamberdNumber(DreamberdIndexable, DreamberdMutable):
     value: Union[int, float]
 
     def access_index(self, index: Value) -> Value:
@@ -121,7 +121,7 @@ class DreamberdNumber(Value, DreamberdIndexable, DreamberdMutable):
         pass
 
 @dataclass(unsafe_hash=True)
-class DreamberdString(Value, DreamberdIndexable, DreamberdNamespaceable):
+class DreamberdString(DreamberdIndexable, DreamberdNamespaceable):
     value: str = field(hash=True)
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict, hash=False)
 
@@ -148,12 +148,12 @@ class DreamberdUndefined(Value):
     pass
 
 @dataclass 
-class DreamberdObject(Value, DreamberdNamespaceable):
+class DreamberdObject(DreamberdNamespaceable):
     class_name: str
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
 @dataclass 
-class DreamberdMap(Value, DreamberdIndexable):
+class DreamberdMap(DreamberdIndexable):
     self_dict: dict[Any, Any]
 
     def access_index(self, index: DreamberdNumber) -> Value:
@@ -189,10 +189,11 @@ class Variable:
 
     def add_lifetime(self, value: Value, confidence: int, duration: int) -> None:
         for i in range(len(self.lifetimes) + 1):
-            if self.lifetimes[i].confidence == confidence or i == len(self.lifetimes):
+            if i == len(self.lifetimes) or self.lifetimes[i].confidence == confidence:
                 if i == 0:
                     self.prev_values.append(self.value)
                 self.lifetimes[i:i] = [VariableLifetime(value, duration, confidence)]
+                break
 
     def clear_outdated_lifetimes(self) -> None:
         remove_indeces = []
