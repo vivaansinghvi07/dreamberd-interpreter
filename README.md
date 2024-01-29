@@ -10,7 +10,6 @@ This is the interpreter for the perfect programming language. It is made in Pyth
 - Create `access_index` and `assign_index` for builtin types.
 - Different variable behavior for different modifier keywords.
 - Debugging.
-- Optimize the when statement to run intelligently.
 
 Shouldn't be too tricky :D
 
