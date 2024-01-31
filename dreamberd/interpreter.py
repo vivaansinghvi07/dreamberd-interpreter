@@ -6,7 +6,9 @@
 
 import re
 import random
+import pickle
 from time import sleep
+from pathlib import Path
 from pprint import pprint
 from threading import Thread
 from copy import copy, deepcopy 
@@ -27,6 +29,12 @@ LIST_EQUALITY_RATIO = 0.7  # min ratio of all the elements of a list to be equal
 MAP_EQUALITY_RATIO = 0.6  # lower thresh cause i feel like it
 FUNCTION_EQUALITY_RATIO = 0.6  # yeah 
 OBJECT_EQUALITY_RATIO = 0.6 
+
+# thing used in the .dreamberd_runtime file
+DB_RUNTIME_PATH = ".dreamberd_runtime"
+INF_VAR_PATH = ".inf_vars"
+INF_VAR_VALUES_PATH = ".inf_vars_values"
+DB_VAR_TO_VALUE_SEP = ":::"  # i'm feeling fancy
 
 # :D 
 Namespace: TypeAlias = dict[str, Union[Variable, Name]]
@@ -93,9 +101,33 @@ def remove_from_all_when_statement_watchers(name_or_id: Union[str, int], when_st
         if name_or_id in watcher_dict:
             del watcher_dict[name_or_id]
 
+def load_global_dreamberd_variables(namespaces: list[Namespace]) -> None:
+
+    dir_path = Path().home()/DB_RUNTIME_PATH
+    inf_values_path = dir_path/INF_VAR_VALUES_PATH
+    inf_var_list = dir_path/INF_VAR_PATH
+    if not dir_path.is_dir(): return 
+    if not inf_values_path.is_dir(): return 
+    if not inf_var_list.is_file(): return 
+
+    with open(inf_var_list, 'r') as f:
+        for line in f.readlines():
+            if not line.strip():
+                continue
+            
+            name, identity, can_be_reset, can_edit_value, confidence = line.split(DB_VAR_TO_VALUE_SEP)
+            can_be_reset = eval(can_be_reset) if can_be_reset in ["True", "False"] else True # safe code !!!!!!!!!!!!
+            can_edit_value = eval(can_edit_value) if can_edit_value in ["True", "False"] else True
+
+            with open(dir_path/INF_VAR_VALUES_PATH/identity, "rb") as data_f:
+                value = pickle.load(data_f)
+            namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence))], [], can_be_reset, can_edit_value)
+
 def declare_new_variable(statement: VariableDeclaration, value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
 
-    name, lifetime, confidence, debug = statement.name.value, statement.lifetime, statement.confidence, statement.debug
+    name, lifetime, confidence, debug, modifiers = statement.name.value, statement.lifetime, statement.confidence, statement.debug, statement.modifiers 
+    can_be_reset = isinstance(v := get_value_from_namespaces(modifiers[0].value, namespaces), DreamberdKeyword) and v.value == "var"
+    can_edit_value = isinstance(v := get_value_from_namespaces(modifiers[1].value, namespaces), DreamberdKeyword) and v.value == "var"
 
     if len(name.split('.')) > 1:
         raise InterpretationError("Cannot declare a variable with periods in the name.")
@@ -113,10 +145,10 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
                         v.prev_values.append(v.value)
                     v.lifetimes[i:i] = [target_lifetime]
         else:
-            target_var = Variable(name, [target_lifetime], [v.value])
+            target_var = Variable(name, [target_lifetime], [v.value], can_be_reset, can_edit_value)
             namespaces[-1][name] = target_var
     else:  # for loop finished unbroken, no matches found
-        target_var = Variable(name, [target_lifetime], [])
+        target_var = Variable(name, [target_lifetime], [], can_be_reset, can_edit_value)
         namespaces[-1][name] = target_var
 
     match debug:
@@ -160,7 +192,23 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
         remove_from_all_when_statement_watchers(name, when_statement_watchers)  # that name is now set to a variable, discard it from the when statement  --  it is now a var not a string
 
     # if we're dealing with seconds just sleep in another thread and remove the variable lifetime
-    if is_lifetime_temporal:
+    if lifetime == "Infinity":
+        # if len(namespaces) == 1: continue  # only save global vars if they are in the global scope
+
+        # define and initialize the directories
+        dir_path = Path().home()/DB_RUNTIME_PATH
+        inf_values_path = dir_path/INF_VAR_VALUES_PATH
+        if not dir_path.is_dir(): dir_path.mkdir()
+        if not inf_values_path.is_dir(): inf_values_path.mkdir()
+
+        generated_addr = random.randint(1, 100000000000)  # hopefully never repeat, if it does, oh well :)
+        with open(dir_path/INF_VAR_PATH, 'a') as f:
+            SEP = DB_VAR_TO_VALUE_SEP
+            f.write(f"{name}{SEP}{generated_addr}{SEP}{can_be_reset}{SEP}{can_edit_value}{SEP}{confidence}\n")
+        with open(dir_path/INF_VAR_VALUES_PATH/str(generated_addr), "wb") as f:
+            pickle.dump(value, f)
+            
+    elif is_lifetime_temporal:
         def remove_lifetime(lifetime: str, target_var: Variable, target_lifetime: VariableLifetime):
             if lifetime[-1] not in ['s', 'm']:
                 raise InterpretationError("Invalid time unit for variable lifetime.")

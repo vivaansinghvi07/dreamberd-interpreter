@@ -5,9 +5,7 @@ This is the interpreter for the perfect programming language. It is made in Pyth
 ## TODO 
 
 - Add string interpolation.
-- Handle Infinity lifetimes. 
 - Handle "const const const" variable declaraions.
-- Create `access_index` and `assign_index` for builtin types.
 - Different variable behavior for different modifier keywords.
 - Debugging.
 
