@@ -94,7 +94,7 @@ def tokenize(filename: str, code: str) -> list[Token]:
                     quote_count += 1 if code[curr] == "'" else 2
                     curr += 1
                 value = ''
-                while code[curr] not in "'\"":
+                while code[curr] not in "'\"\n":   # changing this here because \n not allowed in strings
                     value += code[curr]
                     if code[curr] == "\\":
                         curr += 1
@@ -105,7 +105,7 @@ def tokenize(filename: str, code: str) -> list[Token]:
                     curr += 1
                 if code[curr] not in '!\n':  # autocomplete of strings.......................
                     if quote_count != 0:
-                        raise_error_at_line(filename, code, line_count, "Invalid string. Starting parentheses do not match opening parentheses")
+                        raise_error_at_line(filename, code, line_count, "Invalid string. Starting quotes do not match opening quotes.")
                 curr -= 1
                 add_to_tokens(tokens, line_count, curr - start, TokenType.STRING, value)
             case ' ' | '\t' | '(' | ')': 
