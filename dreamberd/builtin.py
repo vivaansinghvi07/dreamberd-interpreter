@@ -233,21 +233,33 @@ class VariableLifetime:
     value: Value
     lines_left: int 
     confidence: int
+    can_be_reset: bool
+    can_edit_value: bool
 
 @dataclass
 class Variable:
     name: str 
     lifetimes: list[VariableLifetime]
     prev_values: list[Value]
-    can_be_reset: bool
-    can_edit_value: bool
 
-    def add_lifetime(self, value: Value, confidence: int, duration: int) -> None:
+    @property 
+    def can_be_reset(self) -> bool:
+        if self.lifetimes:
+            return self.lifetimes[0].can_be_reset
+        raise InterpretationError("Variable is undefined.")
+
+    @property 
+    def can_edit_value(self) -> bool:
+        if self.lifetimes:
+            return self.lifetimes[0].can_edit_value
+        raise InterpretationError("Variable is undefined.")
+
+    def add_lifetime(self, value: Value, confidence: int, duration: int, can_be_reset: bool, can_edit_value: bool) -> None:
         for i in range(len(self.lifetimes) + 1):
             if i == len(self.lifetimes) or self.lifetimes[i].confidence == confidence:
                 if i == 0:
                     self.prev_values.append(self.value)
-                self.lifetimes[i:i] = [VariableLifetime(value, duration, confidence)]
+                self.lifetimes[i:i] = [VariableLifetime(value, duration, confidence, can_be_reset, can_edit_value)]
                 break
 
     def clear_outdated_lifetimes(self) -> None:

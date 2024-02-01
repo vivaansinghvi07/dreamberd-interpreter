@@ -5,8 +5,8 @@ This is the interpreter for the perfect programming language. It is made in Pyth
 ## TODO 
 
 - Add string interpolation.
+- Polish error handling.
 - Handle "const const const" variable declaraions.
-- Different variable behavior for different modifier keywords.
 - Debugging.
 
 Shouldn't be too tricky :D

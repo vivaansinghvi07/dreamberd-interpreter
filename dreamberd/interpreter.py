@@ -121,7 +121,7 @@ def load_global_dreamberd_variables(namespaces: list[Namespace]) -> None:
 
             with open(dir_path/INF_VAR_VALUES_PATH/identity, "rb") as data_f:
                 value = pickle.load(data_f)
-            namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence))], [], can_be_reset, can_edit_value)
+            namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence), can_be_reset, can_edit_value)], [])
 
 def declare_new_variable(statement: VariableDeclaration, value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
 
@@ -134,10 +134,10 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
 
     is_lifetime_temporal = lifetime is not None and not lifetime[-1].isdigit()
     variable_duration = 100000000000 if is_lifetime_temporal or lifetime is None else int(lifetime)
-    target_lifetime = VariableLifetime(value, variable_duration, confidence)
+    target_lifetime = VariableLifetime(value, variable_duration, confidence, can_be_reset, can_edit_value)
 
     if v := namespaces[-1].get(name): 
-        if isinstance(v, Variable):
+        if isinstance(v, Variable):   # check for another declaration?
             target_var = v
             for i in range(len(v.lifetimes) + 1):
                 if v.lifetimes[i].confidence == confidence or i == len(v.lifetimes):
@@ -145,10 +145,10 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
                         v.prev_values.append(v.value)
                     v.lifetimes[i:i] = [target_lifetime]
         else:
-            target_var = Variable(name, [target_lifetime], [v.value], can_be_reset, can_edit_value)
+            target_var = Variable(name, [target_lifetime], [v.value])
             namespaces[-1][name] = target_var
     else:  # for loop finished unbroken, no matches found
-        target_var = Variable(name, [target_lifetime], [], can_be_reset, can_edit_value)
+        target_var = Variable(name, [target_lifetime], [])
         namespaces[-1][name] = target_var
 
     match debug:
@@ -222,8 +222,8 @@ def assign_variable(statement: VariableAssignment, indexes: list[Value], new_val
     name, confidence, debug = statement.name.value, statement.confidence, statement.debug
         
     var, ns = get_name_and_namespace_from_namespaces(name, namespaces)
-    if not isinstance(var, Variable):
-        raise InterpretationError("Attempted to set name that is not a variable.")
+    if var is None:
+        raise InterpretationError("Attempted to set a name that is undefined.")
  
     match debug:
         case 0: pass 
@@ -269,9 +269,16 @@ def assign_variable(statement: VariableAssignment, indexes: list[Value], new_val
             else:
                 assign_variable_helper(value_to_modify.access_index(index), remaining_indexes)
 
+        if isinstance(var, Variable) and not var.can_edit_value:
+            raise InterpretationError("Cannot edit the value of this variable.")
         assign_variable_helper(var.value, indexes)
                
-    else: var.add_lifetime(new_value, confidence, 100000000000)
+    else: 
+        if not isinstance(var, Variable):
+            raise InterpretationError("Attempted to set name that is not a variable.")
+        if not var.can_be_reset:
+            raise InterpretationError("Attempted to set a variable that cannot be set.")
+        var.add_lifetime(new_value, confidence, 100000000000, var.can_be_reset, var.can_edit_value)
 
     # check if there is anything watching this value
     watchers_key = (name.split('.')[-1], id(ns))  # this shit should be a seperate function
@@ -295,7 +302,7 @@ def assign_variable(statement: VariableAssignment, indexes: list[Value], new_val
             if id(new_value) not in when_statement_watchers[-1]:
                 when_statement_watchers[-1][id(new_value)] = []  
             when_statement_watchers[-1][id(new_value)].append(when_watcher)  ##### remember : this is tuple so it is immutable and copied !!!!!!!!!!!!!!!!!!!!!!  # wait nvm i suick at pytghon
-        if var.prev_values and isinstance(var.prev_values[-1], DreamberdMutable):   # if prev value was being observed under this statement, remove it  ??
+        if isinstance(var, Variable) and var.prev_values and isinstance(var.prev_values[-1], DreamberdMutable):   # if prev value was being observed under this statement, remove it  ??
             remove_from_when_statement_watchers(id(var.prev_values[-1]), when_watcher, when_statement_watchers)
         execute_conditional(condition_val, inside_statements, namespaces, when_statement_watchers)
         visited_whens.append(when_watcher)
@@ -675,6 +682,10 @@ def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces
                 register_async_function(expr, func.value, namespaces, args, async_statements)
                 return DreamberdUndefined()
             elif isinstance(func.value, BuiltinFunction) and func.value.modifies_caller:  # special cases where the function itself modifies the caller
+                if caller:  # seems like a needless check but it makes the errors go away
+                    caller_var = get_name_from_namespaces(caller, namespaces)
+                    if isinstance(caller_var, Variable) and not caller_var.can_edit_value:
+                        raise InterpretationError("Cannot edit the value of this variable.")
                 when_watchers = get_code_from_when_statement_watchers(id(args[0]), when_statement_watchers)
                 for when_watcher in when_watchers:  # i just wanna be done with this :(
                     condition, inside_statements = when_watcher
