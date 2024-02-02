@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "dreamberd"
+version = "0.1.1"
+description = ""
+authors = ["Vivaan Singhvi <singhvi.vivaan@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pynput = "1.7.6"
+pygithub = "2.2.0"
+
+[tool.poetry.scripts]
+dreamberd = "dreamberd:main"
+
+[tool.poetry.extras]
+input = ["pynput"]
+globals = ["pygithub"]
+
+[build-system]
+requires = ["poetry_core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
