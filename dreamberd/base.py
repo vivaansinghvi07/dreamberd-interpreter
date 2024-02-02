@@ -10,6 +10,8 @@ class InterpretationError(Exception):
     _           :(                                                                                              str)  # this is why i am the greatest programmer to ever live
 
 def debug_print(filename: str, code: str, message: str, token: Token) -> None:
+    if not code:  # adjust for repl-called code
+        print(message)
     line = token.line
     num_carrots, num_spaces = len(token.value), token.col - len(token.value) + 1
     debug_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
@@ -24,6 +26,8 @@ def debug_print_no_token(filename: str, message: str) -> None:
     print('\n', debug_string, '\n', sep="")
 
 def raise_error_at_token(filename: str, code: str, message: str, token: Token) -> None:
+    if not code:  # adjust for repl-called code
+        raise InterpretationError(message)
     line = token.line
     num_carrots, num_spaces = len(token.value), token.col - len(token.value) + 1
     error_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
@@ -33,6 +37,8 @@ def raise_error_at_token(filename: str, code: str, message: str, token: Token) -
     raise InterpretationError(error_string)
 
 def raise_error_at_line(filename: str, code: str, line: int, message: str) -> None:
+    if not code:  # adjust for repl-called code
+        raise InterpretationError(message)
     error_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
                    f"  {code.split(chr(10))[line - 1]}\n" + \
                    f"\033[31m{message}\033[39m"

@@ -1,11 +1,62 @@
+import sys
 from time import sleep
 from typing import Union
+from dreamberd.base import InterpretationError, Token, TokenType
 
 from dreamberd.builtin import KEYWORDS, Name, Variable
-from dreamberd.processor.syntax_tree import CodeStatement
+from dreamberd.processor.lexer import tokenize
+from dreamberd.processor.syntax_tree import CodeStatement, generate_syntax_tree
 from dreamberd.interpreter import interpret_code_statements, load_global_dreamberd_variables, load_globals
 
-def main(filename: str, code: str, statements: list[tuple[CodeStatement, ...]]) -> None:  # idk what else to call this
+__all__ = ['run_repl', 'run_file']
+
+__REPL_FILENAME = "__repl__"
+
+sys.tracebacklimit = 0
+
+def __get_next_repl_input(closed_scope_layers: int = 0) -> tuple[str, list[Token]]:
+    print("   " * closed_scope_layers, '\033[33m>\033[39m ', end="", sep="")
+    code = input()
+    tokens = tokenize(__REPL_FILENAME, code)
+    start_closed_scope_layers = closed_scope_layers
+    for t in tokens:
+        if t.type == TokenType.L_CURLY:
+            closed_scope_layers += 1
+        elif t.type == TokenType.R_CURLY:
+            closed_scope_layers -= 1
+    if closed_scope_layers < 0:
+        raise InterpretationError("Too many closed braces with not enough open braces.")
+    kickback_layers, i = 0, 0
+    trimmed_code = code.strip()
+    while i < len(trimmed_code) and trimmed_code[i] == '}':
+        kickback_layers += 1
+        i += 1
+    if kickback_layers:
+        print("\033[1A\r", "   " * (start_closed_scope_layers - kickback_layers), '\033[33m>\033[39m ', code, "   " * (start_closed_scope_layers), sep="", flush=True)
+    if closed_scope_layers:
+        new_code, new_tokens = __get_next_repl_input(closed_scope_layers) 
+        code += new_code 
+        tokens += new_tokens
+    return code, tokens
+
+def run_repl() -> None:
+    namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]  # type: ignore
+    load_globals(__REPL_FILENAME, "", {}, set())
+    load_global_dreamberd_variables(namespaces)
+    async_statements = []
+    when_statement_watchers = [{}]
+    while True: 
+        code, tokens = __get_next_repl_input()
+        statements = generate_syntax_tree(__REPL_FILENAME, tokens, code)
+        interpret_code_statements(statements, namespaces, async_statements, when_statement_watchers)
+            
+def run_file(filename: str) -> None:  # idk what else to call this
+
+    with open(filename) as f:
+        code = f.read()
+    tokens = tokenize(filename, code)
+    statements = generate_syntax_tree(filename, tokens, code)
+
     namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]   # type: ignore
     load_globals(filename, code, {}, set())
     load_global_dreamberd_variables(namespaces)
@@ -16,3 +67,12 @@ def main(filename: str, code: str, statements: list[tuple[CodeStatement, ...]]) 
             sleep(1)  # just waiting for any clicks, when statements, etc
     except KeyboardInterrupt:
         exit()  # quit silently
+
+def main():
+    if len(sys.argv) == 1:
+        run_repl()
+    else:
+        run_file(sys.argv[1])
+
+if __name__ == "__main__":
+    main()
