@@ -4,6 +4,8 @@
 
 # TODO : consider turning name_watchers, filename, and code ino global variables
 
+from __future__ import annotations
+
 import re
 import random
 import pickle
@@ -15,7 +17,17 @@ from copy import copy, deepcopy
 from difflib import SequenceMatcher
 from typing import Optional, TypeAlias, Union
 
-from pynput import keyboard, mouse
+KEY_MOUSE_IMPORTED = True
+try: 
+    from pynput import keyboard, mouse
+except ImportError:
+    KEY_MOUSE_IMPORTED = False
+
+GITHUB_IMPORTED = True 
+try: 
+    import github 
+except ImportError:
+    GITHUB_IMPORTED = False
 
 from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_token
 from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
@@ -1038,6 +1050,9 @@ def get_keyboard_event_object(key: Optional[Union[keyboard.Key, keyboard.KeyCode
 
 def execute_after_statement(event: Value, statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], when_statement_watchers: WhenStatementWatchers) -> None:
 
+    if not KEY_MOUSE_IMPORTED:
+        raise InterpretationError("Attempted to use mouse and keyboard functionality without importing the [input] extra dependency.")
+
     if not isinstance(event, DreamberdString):
         raise InterpretationError(f"Invalid event for the \"after\" statement: \"{db_to_string(event)}\"")
 
@@ -1052,21 +1067,21 @@ def execute_after_statement(event: Value, statements_inside_scope: list[tuple[Co
                     if mouse_buttons[button]:   # it has been released and then pressed again
                         interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_mouse_event_object(x, y, button, event.value))}], [], when_statement_watchers + [{}])
                     del mouse_buttons[button]
-            listener = mouse.Listener(on_click=listener_func)
-
+            listener = mouse.Listener(on_click=listener_func)  # type: ignore
+ 
         case "mousedown":
             def listener_func(x: int, y: int, button: mouse.Button, pressed: bool):
                 nonlocal namespaces, statements_inside_scope
                 if pressed:
                     interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_mouse_event_object(x, y, button, event.value))}], [], when_statement_watchers + [{}])
-            listener = mouse.Listener(on_click=listener_func)
+            listener = mouse.Listener(on_click=listener_func)  # type: ignore
 
         case "mouseup":
             def listener_func(x: int, y: int, button: mouse.Button, pressed: bool):
                 nonlocal namespaces, statements_inside_scope
                 if not pressed:
                     interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_mouse_event_object(x, y, button, event.value))}], [], when_statement_watchers + [{}])
-            listener = mouse.Listener(on_click=listener_func)
+            listener = mouse.Listener(on_click=listener_func)  # type: ignore
 
         case "keyclick":
             keys = set()
@@ -1078,20 +1093,20 @@ def execute_after_statement(event: Value, statements_inside_scope: list[tuple[Co
                 if key in keys:
                     interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_keyboard_event_object(key, event.value))}], [], when_statement_watchers + [{}])
                 keys.discard(key)
-            listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+            listener = keyboard.Listener(on_press=on_press, on_release=on_release)  # type: ignore
 
         case "keydown":
             def on_press(key: Optional[Union[keyboard.Key, keyboard.KeyCode]]):
                 nonlocal namespaces, statements_inside_scope
                 interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_keyboard_event_object(key, event.value))}], [], when_statement_watchers + [{}])
-            listener = keyboard.Listener(on_press=on_press)
+            listener = keyboard.Listener(on_press=on_press)  # type: ignore
 
         case "keyup":
             def listener_func(x: int, y: int, button: mouse.Button, pressed: bool):
                 nonlocal namespaces, statements_inside_scope
                 if not pressed:
                     interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_mouse_event_object(x, y, button, event.value))}], [], when_statement_watchers + [{}])
-            listener = keyboard.Listener(on_click=listener_func)
+            listener = keyboard.Listener(on_click=listener_func)  # type: ignore
 
         case _:
             raise InterpretationError(f"Invalid event for the \"after\" statement: \"{db_to_string(event)}\"")
