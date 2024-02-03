@@ -4,8 +4,9 @@ on:
     types: [opened]
 jobs:
   create-global-variable:
+    name: Job for creating and storing the global
     runs-on: ubuntu-latest
-    if: startsWith(github.event.issue.title, "Create Public Global: ")
+    if: startsWith(github.event.issue.title, 'Create Public Global: ')
     steps:
 
       - name: Checkout Python
