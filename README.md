@@ -4,6 +4,7 @@ This is the interpreter for the perfect programming language. It is made in Pyth
 
 ## TODO 
 
+- Add different files exporting and importing things across ?
 - Add string interpolation.
 - Polish error handling.
 - Handle "const const const" variable declaraions.
@@ -26,4 +27,9 @@ const const name<-2> = "Jake";
 ```
     - It is impossible to evaluate the expression on the right side of the `name` declaration after the print statement. Additionally, doing so doesn't account for possible renaming of keywords.
 
+### Storing Public Global Variables 
 
+To store public globals, the following steps are taken:
+- On the user's side, open a GitHub issue with a title of the format `Create Public Global: {name};;;{confidence}` and the body containing the pickled version of the value.
+- Then, run a GitHub workflow that puts the issue body into a file under `global_objects/` and add an entry to `public_globals.txt` that contains the `name;;;id;;;confidence`
+- Finally, to retrieve these values, the content of each of these files is fetched and converted back into values.

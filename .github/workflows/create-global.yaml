@@ -1,0 +1,26 @@
+name: create-global
+on: 
+  issues:
+    types: [opened]
+jobs:
+  create-global-variable:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.issue.title, "Create Public Global: ")
+    steps:
+
+      - name: Checkout Python
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Create the global variable
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          python3 create_global_from_issue.py
+
+      - name: 

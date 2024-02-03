@@ -5,10 +5,11 @@
 # TODO : consider turning name_watchers, filename, and code ino global variables
 
 from __future__ import annotations
-
+import os
 import re
 import random
 import pickle
+import requests
 from time import sleep
 from pathlib import Path
 from pprint import pprint
@@ -46,7 +47,7 @@ OBJECT_EQUALITY_RATIO = 0.6
 DB_RUNTIME_PATH = ".dreamberd_runtime"
 INF_VAR_PATH = ".inf_vars"
 INF_VAR_VALUES_PATH = ".inf_vars_values"
-DB_VAR_TO_VALUE_SEP = ":::"  # i'm feeling fancy
+DB_VAR_TO_VALUE_SEP = ";;;"  # i'm feeling fancy
 
 # :D 
 Namespace: TypeAlias = dict[str, Union[Variable, Name]]
@@ -135,11 +136,42 @@ def load_global_dreamberd_variables(namespaces: list[Namespace]) -> None:
                 value = pickle.load(data_f)
             namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence), can_be_reset, can_edit_value)], [])
 
+def load_public_global_variables(namespaces: list[Namespace]) -> None:
+    repo_url = "https://raw.githubusercontent.com/vivaansinghvi07/dreamberd-interpreter/main"
+    for line in requests.get(f"{repo_url}/public_globals.txt").text.split("\n"):
+        if not line: continue
+        name, address, confidence = line.split(DB_VAR_TO_VALUE_SEP)
+        can_be_reset = can_edit_value = False  # these were const 
+
+        encoded_value = requests.get(f"{repo_url}/global_objects/{address}").text
+        byte_list = [int(encoded_value[i:i+4]) for i in range(0, len(encoded_value), 4)]
+        value = pickle.loads(bytearray(byte_list))
+        namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence), can_be_reset, can_edit_value)], [])
+
+def open_global_variable_issue(name: str, value: Value, confidence: int):
+    if not GITHUB_IMPORTED:
+        raise InterpretationError("Cannot create a public global variable without a the GitHub API imported.")
+    try:
+        username = os.environ["GITHUB_USERNAME"]
+        password = os.environ["GITHUB_PASSWORD"]    
+    except KeyError:
+        raise InterpretationError("To declare public globals, you must set the GITHUB_USERNAME and GITHUB_PASSWORD environment variables.")
+
+    # transform the variable into a value string
+    value_bytes = list(pickle.dumps(value))
+    issue_body = "".join([str(b).ljust(4, '0') for b in value_bytes])
+
+    # post the variable as an issue to the main github repo
+    g = github.Github(auth=github.Auth.Login(username, password))  # type: ignore
+    repo = g.get_repo("vivaansinghvi07/dreamberd-interpreter")
+    repo.create_issue(f"Create Public Global: {name}{DB_VAR_TO_VALUE_SEP}{confidence}", issue_body)
+
 def declare_new_variable(statement: VariableDeclaration, value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
 
     name, lifetime, confidence, debug, modifiers = statement.name.value, statement.lifetime, statement.confidence, statement.debug, statement.modifiers 
-    can_be_reset = isinstance(v := get_value_from_namespaces(modifiers[0].value, namespaces), DreamberdKeyword) and v.value == "var"
-    can_edit_value = isinstance(v := get_value_from_namespaces(modifiers[1].value, namespaces), DreamberdKeyword) and v.value == "var"
+    is_global = len(modifiers) == 3
+    can_be_reset = isinstance(v := get_value_from_namespaces(modifiers[-2].value, namespaces), DreamberdKeyword) and v.value == "var"
+    can_edit_value = isinstance(v := get_value_from_namespaces(modifiers[-1].value, namespaces), DreamberdKeyword) and v.value == "var"
 
     if len(name.split('.')) > 1:
         raise InterpretationError("Cannot declare a variable with periods in the name.")
@@ -202,6 +234,9 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
             when_statement_watchers[-1][id(target_var)].append(when_watcher)  # put this where the new variable is
             execute_conditional(condition_val, inside_statements, namespaces, when_statement_watchers)
         remove_from_all_when_statement_watchers(name, when_statement_watchers)  # that name is now set to a variable, discard it from the when statement  --  it is now a var not a string
+
+    if is_global:
+        open_global_variable_issue()
 
     # if we're dealing with seconds just sleep in another thread and remove the variable lifetime
     if lifetime == "Infinity":

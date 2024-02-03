@@ -6,7 +6,7 @@ from dreamberd.base import InterpretationError, Token, TokenType
 from dreamberd.builtin import KEYWORDS, Name, Variable
 from dreamberd.processor.lexer import tokenize
 from dreamberd.processor.syntax_tree import CodeStatement, generate_syntax_tree
-from dreamberd.interpreter import interpret_code_statements, load_global_dreamberd_variables, load_globals
+from dreamberd.interpreter import interpret_code_statements, load_global_dreamberd_variables, load_globals, load_public_global_variables
 
 __all__ = ['run_repl', 'run_file']
 
@@ -60,6 +60,7 @@ def run_file(filename: str) -> None:  # idk what else to call this
     namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]   # type: ignore
     load_globals(filename, code, {}, set())
     load_global_dreamberd_variables(namespaces)
+    load_public_global_variables(namespaces)
     interpret_code_statements(statements, namespaces, [], [{}])
     print("\033[33mCode has finished executing. Press ^C once or twice to stop waiting for when-statements and after-statements.\033[039m")
     try:
