@@ -1,4 +1,5 @@
 import sys
+from argparse import ArgumentParser
 from time import sleep
 from typing import Union
 from dreamberd.base import InterpretationError, Token, TokenType
@@ -11,8 +12,6 @@ from dreamberd.interpreter import interpret_code_statements, load_global_dreambe
 __all__ = ['run_repl', 'run_file']
 
 __REPL_FILENAME = "__repl__"
-
-sys.tracebacklimit = 0
 
 def __get_next_repl_input(closed_scope_layers: int = 0) -> tuple[str, list[Token]]:
     print("   " * closed_scope_layers, '\033[33m>\033[39m ', end="", sep="")
@@ -69,7 +68,15 @@ def run_file(filename: str) -> None:  # idk what else to call this
     except KeyboardInterrupt:
         exit()  # quit silently
 
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument('-s', '--suppress-traceback', action="store_true")
+    return parser.parse_args()
+
 def main():
+    args = parse_args()
+    if args.suppress_traceback:
+        sys.tracebacklimit = 0
     if len(sys.argv) == 1:
         run_repl()
     else:

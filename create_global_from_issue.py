@@ -19,7 +19,7 @@ if __name__ == "__main__":
     while value_id < 0 or value_id in os.listdir("global_objects"):
         value_id = random.randint(1, 1000000000)
 
-    with open(f"./stored_objects/{value_id}.py") as f:
+    with open(f"./stored_objects/{value_id}") as f:
         f.write(ISSUE_BODY)
     with open(f"./public_globals.txt") as f:
         f.write(f"{VARIABLE_NAME}{NAME_TO_ID_SEP}{value_id}{NAME_TO_ID_SEP}{CONFIDENCE}\n")

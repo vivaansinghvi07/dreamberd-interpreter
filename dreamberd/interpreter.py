@@ -127,7 +127,7 @@ def load_global_dreamberd_variables(namespaces: list[Namespace]) -> None:
         for line in f.readlines():
             if not line.strip():
                 continue
-            
+        
             name, identity, can_be_reset, can_edit_value, confidence = line.split(DB_VAR_TO_VALUE_SEP)
             can_be_reset = eval(can_be_reset) if can_be_reset in ["True", "False"] else True # safe code !!!!!!!!!!!!
             can_edit_value = eval(can_edit_value) if can_edit_value in ["True", "False"] else True
@@ -236,7 +236,7 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
         remove_from_all_when_statement_watchers(name, when_statement_watchers)  # that name is now set to a variable, discard it from the when statement  --  it is now a var not a string
 
     if is_global:
-        open_global_variable_issue()
+        open_global_variable_issue(name, value, confidence)
 
     # if we're dealing with seconds just sleep in another thread and remove the variable lifetime
     if lifetime == "Infinity":
