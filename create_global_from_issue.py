@@ -7,6 +7,7 @@ And does the following:
     2) Create a file in the `stored_objects` directory with the name of the ID and the information in the variable
 """
 import os 
+import github
 import random
 
 if __name__ == "__main__":
@@ -23,3 +24,7 @@ if __name__ == "__main__":
         f.write(ISSUE_BODY)
     with open(f"./public_globals.txt", 'a') as f:
         f.write(f"{VARIABLE_NAME}{NAME_TO_ID_SEP}{value_id}{NAME_TO_ID_SEP}{CONFIDENCE}\n")
+
+    g = github.Github(auth=github.Auth.Token(os.environ["TOKEN"]))
+    issue = g.get_repo("vivaansinghvi07/dreamberd-interpreter").get_issue(int(os.environ["ISSUE_NUMBER"]))
+    issue.edit(state='closed')

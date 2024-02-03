@@ -20,7 +20,10 @@ jobs:
         env:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-        run: |
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: | 
+          pip3 install PyGithub
           python3 create_global_from_issue.py
 
       - name: Commit and push new files to github

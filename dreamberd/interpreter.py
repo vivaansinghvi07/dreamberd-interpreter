@@ -152,19 +152,18 @@ def open_global_variable_issue(name: str, value: Value, confidence: int):
     if not GITHUB_IMPORTED:
         raise InterpretationError("Cannot create a public global variable without a the GitHub API imported.")
     try:
-        username = os.environ["GITHUB_USERNAME"]
-        password = os.environ["GITHUB_PASSWORD"]    
+        access_token = os.environ["GITHUB_ACCESS_TOKEN"]
     except KeyError:
-        raise InterpretationError("To declare public globals, you must set the GITHUB_USERNAME and GITHUB_PASSWORD environment variables.")
+        raise InterpretationError("To declare public globals, you must set the GITHUB_ACCESS_TOKEN to a personal access token.")
 
     # transform the variable into a value string
     value_bytes = list(pickle.dumps(value))
     issue_body = "".join([str(b).ljust(4, '0') for b in value_bytes])
 
     # post the variable as an issue to the main github repo
-    g = github.Github(auth=github.Auth.Login(username, password))  # type: ignore
-    repo = g.get_repo("vivaansinghvi07/dreamberd-interpreter")
-    repo.create_issue(f"Create Public Global: {name}{DB_VAR_TO_VALUE_SEP}{confidence}", issue_body)
+    with github.Github(auth=github.Auth.Token(access_token)) as g:   # type: ignore 
+        repo = g.get_repo("vivaansinghvi07/dreamberd-interpreter")
+        repo.create_issue(f"Create Public Global: {name}{DB_VAR_TO_VALUE_SEP}{confidence}", issue_body)
 
 def declare_new_variable(statement: VariableDeclaration, value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
 
@@ -184,7 +183,7 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
         if isinstance(v, Variable):   # check for another declaration?
             target_var = v
             for i in range(len(v.lifetimes) + 1):
-                if v.lifetimes[i].confidence == confidence or i == len(v.lifetimes):
+                if i == len(v.lifetimes) or v.lifetimes[i].confidence == confidence:
                     if i == 0:
                         v.prev_values.append(v.value)
                     v.lifetimes[i:i] = [target_lifetime]
