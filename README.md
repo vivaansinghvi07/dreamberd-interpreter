@@ -24,11 +24,11 @@ The goal of this project is to implement every feature from the DreamBerd langua
 - Regex: Since type hints seem to not even do anything there is no point in implementing a Regex parser. 
 - "Variable Hoisting" (being able to declare variables with a negative lifetime): Given the fact that keywords can be renamed and reassigned in this language, it does not make sense to implement this as the following breaks:
 
-```javascript
-print(name)
-var const = "lol";
-const const name<-2> = "Jake";
-```
+    ```javascript
+    print(name)
+    var const = "lol";
+    const const name<-2> = "Jake";
+    ```
     It is impossible to evaluate the expression on the right side of the `name` declaration after the print statement. Additionally, doing so doesn't account for possible renaming of keywords.
 
 ### Storing Public Global Variables 
