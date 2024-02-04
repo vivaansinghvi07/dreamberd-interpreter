@@ -34,6 +34,8 @@ options:
 ## TODO 
 
 - Add different files exporting and importing things across ?
+- Allow escape characters in strings (currently you can't do \n)
+- Allow for empty strings (currently parsed as a string with >1 quotes)
 - Add string interpolation
   - Use the locale module like this:
   ```python3
