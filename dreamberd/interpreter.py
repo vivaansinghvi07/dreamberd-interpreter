@@ -137,7 +137,7 @@ def load_global_dreamberd_variables(namespaces: list[Namespace]) -> None:
             namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence), can_be_reset, can_edit_value)], [])
 
 def load_public_global_variables(namespaces: list[Namespace]) -> None:
-    repo_url = "https://raw.githubusercontent.com/vivaansinghvi07/dreamberd-interpreter/main"
+    repo_url = "https://raw.githubusercontent.com/vivaansinghvi07/dreamberd-interpreter-globals/main"
     for line in requests.get(f"{repo_url}/public_globals.txt").text.split("\n"):
         if not line: continue
         name, address, confidence = line.split(DB_VAR_TO_VALUE_SEP)
@@ -162,7 +162,7 @@ def open_global_variable_issue(name: str, value: Value, confidence: int):
 
     # post the variable as an issue to the main github repo
     with github.Github(auth=github.Auth.Token(access_token)) as g:   # type: ignore 
-        repo = g.get_repo("vivaansinghvi07/dreamberd-interpreter")
+        repo = g.get_repo("vivaansinghvi07/dreamberd-interpreter-globals")
         repo.create_issue(f"Create Public Global: {name}{DB_VAR_TO_VALUE_SEP}{confidence}", issue_body)
 
 def declare_new_variable(statement: VariableDeclaration, value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
