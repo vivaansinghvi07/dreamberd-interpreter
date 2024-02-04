@@ -36,6 +36,9 @@ def __get_next_repl_input(closed_scope_layers: int = 0) -> tuple[str, list[Token
         new_code, new_tokens = __get_next_repl_input(closed_scope_layers) 
         code += new_code 
         tokens += new_tokens
+    match l := [t for t in tokens if not t.type == TokenType.WHITESPACE]:
+        case [Token(type=TokenType.NAME)]:
+            tokens = [Token(TokenType.NAME, "print", -1, -1), Token(TokenType.WHITESPACE, " ", -1, -1), l[0], Token(TokenType.BANG, '!', -1, -1)]
     return code, tokens
 
 def run_repl() -> None:
