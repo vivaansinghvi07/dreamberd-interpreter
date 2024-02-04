@@ -8,12 +8,23 @@ And does the following:
 """
 import os 
 import github
+import random
 
 if __name__ == "__main__":
 
-    with github.Github(auth=github.Auth.Token(os.environ["HOME_TOKEN"])) as g:
-        issue = g.get_repo("vivaansinghvi07/dreamberd-interpreter").get_issue(int(os.environ["ISSUE_NUMBER"]))
-        issue.edit(state='closed')
+    NAME_TO_ID_SEP = ";;;"
+    VARIABLE_NAME, CONFIDENCE = os.environ["ISSUE_TITLE"].removeprefix("Create Public Global: ").split(NAME_TO_ID_SEP)
+    ISSUE_BODY = os.environ["ISSUE_BODY"]
 
-    with github.Github(auth=github.Auth.Token(os.environ["GLOBALS_REPO_TOKEN"])) as g:
-        g.get_repo("vivaansinghvi07/dreamberd-interpreter-globals").create_issue(os.environ["ISSUE_TITLE"], os.environ["ISSUE_BODY"])
+    value_id = -1
+    while value_id < 0 or value_id in os.listdir("global_objects"):
+        value_id = random.randint(1, 1000000000)
+
+    with open(f"./global_objects/{value_id}", 'w') as f:
+        f.write(ISSUE_BODY)
+    with open(f"./public_globals.txt", 'a') as f:
+        f.write(f"{VARIABLE_NAME}{NAME_TO_ID_SEP}{value_id}{NAME_TO_ID_SEP}{CONFIDENCE}\n")
+
+    g = github.Github(auth=github.Auth.Token(os.environ["TOKEN"]))
+    issue = g.get_repo("vivaansinghvi07/dreamberd-interpreter").get_issue(int(os.environ["ISSUE_NUMBER"]))
+    issue.edit(state='closed')
