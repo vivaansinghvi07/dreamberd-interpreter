@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dreamberd"
-version = "0.1.1"
+version = "0.0.0"
 description = ""
 authors = ["Vivaan Singhvi <singhvi.vivaan@gmail.com>"]
 
