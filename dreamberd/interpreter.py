@@ -402,10 +402,16 @@ def determine_non_name_value(val: str) -> Value:
     Takes a string/Token and determines if the value is a number, string, or invalid. 
     Valid names should have been found already by the previous function.
     """
+    global deleted_values
+    retval = None
     if len(v := val.split('.')) <= 2:
         if all(x.isdigit() for x in v):
-            return DreamberdNumber([int, float][len(v) - 1](val))
-    return DreamberdString(val)
+            retval = DreamberdNumber([int, float][len(v) - 1](val))
+    if not retval:
+        retval = DreamberdString(val)
+    if retval in deleted_values:
+        raise InterpretationError(f"The value {retval.value} has been deleted.")
+    return retval
 
 def is_approx_equal(left: Value, right: Value) -> DreamberdBoolean:
 
@@ -646,7 +652,7 @@ def perform_two_value_operation(left: Value, right: Value, operator: OperatorTyp
     raise_error_at_token(filename, code, "Something went wrong here.", operator_token); raise
 
 def get_value_from_namespaces(name_or_value: str, namespaces: list[Namespace]) -> Value:
-    
+
     # what the fuck am i doing rn
     if v := get_name_from_namespaces(name_or_value, namespaces):
         if isinstance(v.value, DreamberdPromise):
@@ -732,11 +738,14 @@ def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces
                     caller_var = get_name_from_namespaces(caller, namespaces)
                     if isinstance(caller_var, Variable) and not caller_var.can_edit_value:
                         raise InterpretationError("Cannot edit the value of this variable.")
+
+                retval = evaluate_normal_function(expr, func.value, namespaces, args, when_statement_watchers)
                 when_watchers = get_code_from_when_statement_watchers(id(args[0]), when_statement_watchers)
                 for when_watcher in when_watchers:  # i just wanna be done with this :(
                     condition, inside_statements = when_watcher
                     condition_val = evaluate_expression(condition, namespaces, async_statements, when_statement_watchers)
                     execute_conditional(condition_val, inside_statements, namespaces, when_statement_watchers)
+                return retval
 
             return evaluate_normal_function(expr, func.value, namespaces, args, when_statement_watchers)
 
@@ -1172,8 +1181,14 @@ def register_when_statement(condition: Union[list[Token], ExpressionTreeNode], s
     # if the internal value is a list, store it as an address to that mutable type.
     built_condition = get_built_expression(condition)
     gathered_names = gather_names_or_values(built_condition)
+    caller_names = [n for name in gathered_names if (n := '.'.join(name.split('.')[:-1]))]
     dict_keys = [id(v) if isinstance(v := get_name_from_namespaces(name, namespaces), Variable) else name for name in gathered_names]\
-                + [id(v.value) for name in gathered_names if (v := get_name_from_namespaces(name, namespaces)) is not None and isinstance(v.value, DreamberdMutable)]
+                + [id(v.value) for name in gathered_names if (v := get_name_from_namespaces(name, namespaces)) is not None and isinstance(v.value, DreamberdMutable)]\
+                + [id(v) for name in caller_names if isinstance(v := get_name_from_namespaces(name, namespaces), Variable)]\
+                + [id(v.value) for name in caller_names if (v := get_name_from_namespaces(name, namespaces)) is not None and isinstance(v.value, DreamberdMutable)]\
+
+    # the last comprehension watches callers of things (like list in list.length), and requires some implementation in the evaluate_expression function 
+    # so that the caller of a function is also observed for it being called
     
     # register for future whens
     for name in dict_keys:
