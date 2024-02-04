@@ -6,8 +6,12 @@ This is the interpreter for the perfect programming language. It is made in Pyth
 
 - Add different files exporting and importing things across ?
 - Add string interpolation.
+  - Use the locale module like this:
+  ```python3
+  locale.setlocale(locale.LC_ALL, locale.getdefaultlocale()[0])
+  locale.localeconv()['currency_symbol']
+  ```
 - Polish error handling.
-- Handle "const const const" variable declaraions.
 - Debugging.
 
 Shouldn't be too tricky :D
