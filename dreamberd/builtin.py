@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Union
+from typing import Callable, Optional, Union
 from dreamberd.base import InterpretationError
 
 from dreamberd.processor.syntax_tree import CodeStatement
@@ -14,6 +14,24 @@ def db_not(x: DreamberdBoolean) -> DreamberdBoolean:
     if x.value is None:
         return DreamberdBoolean(None)
     return DreamberdBoolean(not x.value)
+
+def db_list_push(self, val: Value) -> None:
+    self.values.append(val) 
+    self.create_namespace()  # update the length
+
+def db_list_pop(self, index: DreamberdNumber) -> Value:
+    if not isinstance(index, DreamberdNumber) or not is_int(index.value):
+        raise InterpretationError("Expected integer for list popping.")
+    elif not -1 <= index.value <= len(self.values) - 1:
+        raise InterpretationError("Indexing out of list bounds.")
+    retval = self.values.pop(round(index.value) + 1)
+    self.create_namespace()
+    return retval
+
+def db_str_push(self, val: Value) -> None:
+    val_str = db_to_string(val).value
+    self.value += val_str 
+    self.create_namespace()  # update the length
 
 # class Value(metaclass=ABCMeta):   # TODO POTENTIALLY DO THIS TO ALLOW FOR MORE OBJECTS WITHOUT MUCH HASSLE
 #     @abstractmethod 
@@ -61,19 +79,6 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
         self.create_namespace(False)
 
     def create_namespace(self, is_update: bool = True) -> None:
-
-        def db_list_push(self, val: Value) -> None:
-            self.values.append(val) 
-            self.create_namespace()  # update the length
-
-        def db_list_pop(self, index: DreamberdNumber) -> Value:
-            if not isinstance(index, DreamberdNumber) or not is_int(index.value):
-                raise InterpretationError("Expected integer for list popping.")
-            elif not -1 <= index.value <= len(self.values) - 1:
-                raise InterpretationError("Indexing out of list bounds.")
-            retval = self.values.pop(round(index.value) + 1)
-            self.create_namespace()
-            return retval
 
         if not is_update:
             self.namespace = {
@@ -152,11 +157,6 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
         self.create_namespace(False)
 
     def create_namespace(self, is_update: bool = True):
-
-        def db_str_push(self, val: Value) -> None:
-            val_str = db_to_string(val).value
-            self.value += val_str 
-            self.create_namespace()  # update the length
 
         if not is_update:
             self.namespace |= {
