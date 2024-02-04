@@ -29,7 +29,7 @@ print(name)
 var const = "lol";
 const const name<-2> = "Jake";
 ```
-    - It is impossible to evaluate the expression on the right side of the `name` declaration after the print statement. Additionally, doing so doesn't account for possible renaming of keywords.
+    It is impossible to evaluate the expression on the right side of the `name` declaration after the print statement. Additionally, doing so doesn't account for possible renaming of keywords.
 
 ### Storing Public Global Variables 
 
