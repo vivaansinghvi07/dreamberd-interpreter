@@ -19,11 +19,10 @@ fn dispArr(l) => {
 }
 
 fn applyCA(l) => {
-   var var l = l!
    var var new_l = []!
-   fillArr(new_l, l.length)!
+   fillArr(new_l, N)!
    var var index = 0!
-   when (index < l.length-2) {  
+   when (index < N-2) {  
       var var total_alive = l[index-1]*4 + l[index]*2 + l[index+1]!
       if (total_alive==1 | total_alive==3 | total_alive==4 | total_alive==6) {
          new_l[index] = 1!
@@ -34,22 +33,21 @@ fn applyCA(l) => {
       index = index + 1!
    }
    var var new_index = -1! 
-   const const n = l.length!
-   when (new_index < n-1) {
+   when (new_index < N-1) {
       l[new_index] = new_l[new_index]!
       new_index = new_index + 1!
    }
 }
 
-var var n = 200!
+const const N = 50!
 var var l = []!
 var var counter = 0!
-fillArr(l, n)!
+fillArr(l, N)!
 dispArr(l)!
-l[n / 2] = 1!
+l[N / 2] = 1!
 
-when (counter < 200) {
-   applyCA l!
+when (counter < N) {
    dispArr l!
+   applyCA l!
    counter = counter + 1!
 }
