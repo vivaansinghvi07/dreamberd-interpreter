@@ -51,7 +51,7 @@ def run_repl() -> None:
             
 def run_file(filename: str) -> None:  # idk what else to call this
 
-    with open(filename) as f:
+    with open(filename, 'r') as f:
         code = f.read()
     tokens = tokenize(filename, code)
     statements = generate_syntax_tree(filename, tokens, code)
@@ -70,17 +70,18 @@ def run_file(filename: str) -> None:  # idk what else to call this
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('-s', '--suppress-traceback', action="store_true")
+    parser.add_argument('file', help="The file containing your DreamBerd code.", nargs='?', default='', type=str)
+    parser.add_argument('-s', '--suppress-traceback', help="Limit the error traceback to a single message.", action="store_true")
     return parser.parse_args()
 
 def main():
     args = parse_args()
     if args.suppress_traceback:
         sys.tracebacklimit = 0
-    if len(sys.argv) == 1:
+    if not args.file:
         run_repl()
     else:
-        run_file(sys.argv[1])
+        run_file(args.file)
 
 if __name__ == "__main__":
     main()

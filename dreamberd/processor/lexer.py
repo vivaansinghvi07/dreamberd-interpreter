@@ -9,7 +9,7 @@ def add_to_tokens(token_list: list[Token], line: int, col: int, token: TokenType
     token_list.append(Token(token, value if value is not None else token.value, line, col))
 
 def tokenize(filename: str, code: str) -> list[Token]:
-    code += ' '  # adding a space here so i dont have to write 10 damn checks for out of bounds
+    code += '   '  # adding a space here so i dont have to write 10 damn checks for out of bounds
     line_count = 1
     tokens = []
     curr, start = 0, 0

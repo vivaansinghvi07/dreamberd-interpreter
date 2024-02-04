@@ -139,7 +139,7 @@ def load_global_dreamberd_variables(namespaces: list[Namespace]) -> None:
 def load_public_global_variables(namespaces: list[Namespace]) -> None:
     repo_url = "https://raw.githubusercontent.com/vivaansinghvi07/dreamberd-interpreter-globals/main"
     for line in requests.get(f"{repo_url}/public_globals.txt").text.split("\n"):
-        if not line: continue
+        if not line.strip(): continue
         name, address, confidence = line.split(DB_VAR_TO_VALUE_SEP)
         can_be_reset = can_edit_value = False  # these were const 
 
@@ -158,7 +158,7 @@ def open_global_variable_issue(name: str, value: Value, confidence: int):
 
     # transform the variable into a value string
     value_bytes = list(pickle.dumps(value))
-    issue_body = "".join([str(b).ljust(4, '0') for b in value_bytes])
+    issue_body = "".join([str(b).rjust(4, '0') for b in value_bytes])
 
     # post the variable as an issue to the main github repo
     with github.Github(auth=github.Auth.Token(access_token)) as g:   # type: ignore 

@@ -1,8 +1,1 @@
-const const i = 0!
-after "mouseclick" {
-   i = i + 1!
-   print event!
-}
-when (i > 0) {
-   print i!
-}
+print asd!
