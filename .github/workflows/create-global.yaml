@@ -4,6 +4,7 @@ on:
     types: [opened]
 jobs:
   create-global-variable:
+    environment: globals-repo-secret
     name: Job for creating and storing the global
     runs-on: ubuntu-latest
     steps:
@@ -21,15 +22,8 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOME_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GLOBALS_REPO_TOKEN: ${{ secrets.TOKEN }}
         run: | 
           pip3 install PyGithub
           python3 create_global_from_issue.py
-
-      - name: Commit and push new files to github
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "added public global variable"
-          git push
