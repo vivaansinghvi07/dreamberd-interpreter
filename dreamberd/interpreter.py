@@ -2,8 +2,6 @@
 # because pyright (my nvim LSP) doesn't recognize the code terminating at the raise_error_at_token, so I add this 
 # to make sure it recognizes that and doesn't yell at me because I don't like being yelled at
 
-# TODO : consider turning name_watchers, filename, and code ino global variables
-
 from __future__ import annotations
 import os
 import re
@@ -12,9 +10,8 @@ import pickle
 import requests
 from time import sleep
 from pathlib import Path
-from pprint import pprint
+from copy import deepcopy
 from threading import Thread
-from copy import copy, deepcopy 
 from difflib import SequenceMatcher
 from typing import Optional, TypeAlias, Union
 
@@ -30,7 +27,7 @@ try:
 except ImportError:
     GITHUB_IMPORTED = False
 
-from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_token
+from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
 from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
 from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
 from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExpressionStatement, FunctionDefinition, ReturnStatement, VariableAssignment, VariableDeclaration, WhenStatement
@@ -72,7 +69,7 @@ def evaluate_normal_function(expr: FunctionNode, func: Union[DreamberdFunction, 
     # check to evaluate builtin
     if isinstance(func, BuiltinFunction):
         if func.arg_count > len(args):
-            raise_error_at_token(filename, code, f"Expected more arguments for function call with {func.arg_count} argument{'s' if func.arg_count == 1 else ''}.", expr.name)
+            raise_error_at_token(filename, code, f"Expected more arguments for function call with {func.arg_count} argument{'s' if func.arg_count == 1 else ''}.", expr.name); raise
         try:
             max_arg_count = func.arg_count if func.arg_count != -1 else len(args)
             return func.function(*args[:max_arg_count]) or DreamberdUndefined()
@@ -81,14 +78,14 @@ def evaluate_normal_function(expr: FunctionNode, func: Union[DreamberdFunction, 
     
     # check length is proper, adjust namespace, and run this code
     if len(func.args) > len(args):
-        raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.", expr.name)
+        raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.", expr.name); raise
     new_namespace: Namespace = {name: Name(name, arg) for name, arg in zip(func.args, args)}
     return interpret_code_statements(func.code, namespaces + [new_namespace], [], when_statement_watchers + [{}]) or DreamberdUndefined()
 
 def register_async_function(expr: FunctionNode, func: DreamberdFunction, namespaces: list[Namespace], args: list[Value], async_statements: AsyncStatements) -> None:
     """ Adds a job to the async statements queue, which is accessed in the interpret_code_statements function. """
     if len(func.args) > len(args):
-        raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.", expr.name)
+        raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.", expr.name); raise
     function_namespaces = namespaces + [{name: Name(name, arg) for name, arg in zip(func.args, args)}]
     async_statements.append((func.code, function_namespaces))
 
@@ -150,11 +147,11 @@ def load_public_global_variables(namespaces: list[Namespace]) -> None:
 
 def open_global_variable_issue(name: str, value: Value, confidence: int):
     if not GITHUB_IMPORTED:
-        raise InterpretationError("Cannot create a public global variable without a the GitHub API imported.")
+        raise_error_at_line(filename, code, current_line, "Cannot create a public global variable without a the GitHub API imported."); raise
     try:
         access_token = os.environ["GITHUB_ACCESS_TOKEN"]
     except KeyError:
-        raise InterpretationError("To declare public globals, you must set the GITHUB_ACCESS_TOKEN to a personal access token.")
+        raise_error_at_line(filename, code, current_line, "To declare public globals, you must set the GITHUB_ACCESS_TOKEN to a personal access token."); raise
 
     # transform the variable into a value string
     value_bytes = list(pickle.dumps(value))
@@ -168,12 +165,13 @@ def open_global_variable_issue(name: str, value: Value, confidence: int):
 def declare_new_variable(statement: VariableDeclaration, value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
 
     name, lifetime, confidence, debug, modifiers = statement.name.value, statement.lifetime, statement.confidence, statement.debug, statement.modifiers 
+    name_token = statement.name  # for error handling purposes
     is_global = len(modifiers) == 3
-    can_be_reset = isinstance(v := get_value_from_namespaces(modifiers[-2].value, namespaces), DreamberdKeyword) and v.value == "var"
-    can_edit_value = isinstance(v := get_value_from_namespaces(modifiers[-1].value, namespaces), DreamberdKeyword) and v.value == "var"
+    can_be_reset = isinstance(v := get_value_from_namespaces(modifiers[-2], namespaces), DreamberdKeyword) and v.value == "var"
+    can_edit_value = isinstance(v := get_value_from_namespaces(modifiers[-1], namespaces), DreamberdKeyword) and v.value == "var"
 
-    if len(name.split('.')) > 1:
-        raise InterpretationError("Cannot declare a variable with periods in the name.")
+    if '.' in name:
+        raise_error_at_token(filename, code, "Cannot declare a variable with periods in the name.", name_token); raise
 
     is_lifetime_temporal = lifetime is not None and not lifetime[-1].isdigit()
     variable_duration = 100000000000 if is_lifetime_temporal or lifetime is None else int(lifetime)
@@ -204,11 +202,11 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
         case 3: 
             expr = get_built_expression(statement.expression)
             names = gather_names_or_values(expr)
-            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}", statement.name)
+            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name_token, namespaces)).value}' for name in names])}", statement.name)
         case _: 
             expr = get_built_expression(statement.expression)
             names = gather_names_or_values(expr)
-            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.\nThe value of each name in the exprehttps://accounts.spotify.com/en/login?continue=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F0jqXRIN34QAfwEiB72S4H7%3Fsi%3D6f53123059f741ec%26pt%3D09c9c4118ece8f2d0fad56d9f2a4345ession is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name, namespaces)).value}' for name in names])}\nThe expression used to get this value is: \n{expr.to_string()}", statement.name)
+            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.\nThe value of each name in the exprehttps://accounts.spotify.com/en/login?continue=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F0jqXRIN34QAfwEiB72S4H7%3Fsi%3D6f53123059f741ec%26pt%3D09c9c4118ece8f2d0fad56d9f2a4345ession is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name_token, namespaces)).value}' for name in names])}\nThe expression used to get this value is: \n{expr.to_string()}", statement.name)
 
     # check if there is a watcher for this name
     watchers_key = (name, id(namespaces[-1]))
@@ -255,9 +253,9 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
             pickle.dump(value, f)
             
     elif is_lifetime_temporal:
-        def remove_lifetime(lifetime: str, target_var: Variable, target_lifetime: VariableLifetime):
-            if lifetime[-1] not in ['s', 'm']:
-                raise InterpretationError("Invalid time unit for variable lifetime.")
+        def remove_lifetime(lifetime: str, target_var: Variable, target_lifetime: VariableLifetime, error_line: int):
+            if lifetime[-1] not in ['s', 'm'] or all(c.isdigit() for c in lifetime[:-1]):
+                raise_error_at_line(filename, code, error_line, "Invalid time unit for variable lifetime."); raise
             sleep(int(lifetime[:-1]) if lifetime[-1] == 's' else int(lifetime[:-1] * 60))
             for i, lt in reversed([*enumerate(target_var.lifetimes)]):
                 if lt is target_lifetime:
@@ -266,10 +264,11 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
 
 def assign_variable(statement: VariableAssignment, indexes: list[Value], new_value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
     name, confidence, debug = statement.name.value, statement.confidence, statement.debug
+    name_token = statement.name
         
     var, ns = get_name_and_namespace_from_namespaces(name, namespaces)
     if var is None:
-        raise InterpretationError("Attempted to set a name that is undefined.")
+        raise_error_at_token(filename, code, "Attempted to set a name that is undefined.", name_token); raise
  
     match debug:
         case 0: pass 
@@ -297,7 +296,7 @@ def assign_variable(statement: VariableAssignment, indexes: list[Value], new_val
         # goes down the list until it can assign something in the list
         def assign_variable_helper(value_to_modify: Value, remaining_indexes: list[Value]):
             if not value_to_modify or not isinstance(value_to_modify, DreamberdIndexable):
-                raise InterpretationError("Attempted to index into an un-indexable object.")
+                raise_error_at_line(filename, code, name_token.line, "Attempted to index into an un-indexable object."); raise
             index = remaining_indexes.pop(0) 
 
             # check for some watchers here too!!!!!!!!!!!
@@ -316,14 +315,14 @@ def assign_variable(statement: VariableAssignment, indexes: list[Value], new_val
                 assign_variable_helper(value_to_modify.access_index(index), remaining_indexes)
 
         if isinstance(var, Variable) and not var.can_edit_value:
-            raise InterpretationError("Cannot edit the value of this variable.")
+            raise_error_at_token(filename, code, "Cannot edit the value of this variable.", name_token); raise
         assign_variable_helper(var.value, indexes)
                
     else: 
         if not isinstance(var, Variable):
-            raise InterpretationError("Attempted to set name that is not a variable.")
+            raise_error_at_token(filename, code, "Attempted to set name that is not a variable.", name_token); raise
         if not var.can_be_reset:
-            raise InterpretationError("Attempted to set a variable that cannot be set.")
+            raise_error_at_token(filename, code, "Attempted to set a variable that cannot be set.", name_token); raise
         var.add_lifetime(new_value, confidence, 100000000000, var.can_be_reset, var.can_edit_value)
 
     # check if there is anything watching this value
@@ -397,20 +396,20 @@ def get_name_and_namespace_from_namespaces(name: str, namespaces: list[Namespace
         return base_val, ns
     return None, namespaces[-1]
 
-def determine_non_name_value(val: str) -> Value:
+def determine_non_name_value(val: Token) -> Value:
     """ 
     Takes a string/Token and determines if the value is a number, string, or invalid. 
     Valid names should have been found already by the previous function.
     """
     global deleted_values
     retval = None
-    if len(v := val.split('.')) <= 2:
+    if len(v := val.value.split('.')) <= 2:
         if all(x.isdigit() for x in v):
-            retval = DreamberdNumber([int, float][len(v) - 1](val))
+            retval = DreamberdNumber([int, float][len(v) - 1](val.value))
     if not retval:
-        retval = DreamberdString(val)
+        retval = DreamberdString(val.value)
     if retval in deleted_values:
-        raise InterpretationError(f"The value {retval.value} has been deleted.")
+        raise_error_at_line(filename, code, val.line, f"The value {retval.value} has been deleted."); raise
     return retval
 
 def is_approx_equal(left: Value, right: Value) -> DreamberdBoolean:
@@ -539,7 +538,7 @@ def is_really_really_equal(left: Value, right: Value) -> DreamberdBoolean:
 
 def is_less_than(left: Value, right: Value) -> DreamberdBoolean:
     if type(left) != type(right):
-        raise InterpretationError('Cannot compare two values of different types.')
+        raise_error_at_line(filename, code, current_line, 'Cannot compare two values of different types.'); raise
     match left, right:
         case (DreamberdNumber(), DreamberdNumber()) | \
              (DreamberdString(), DreamberdString()) | \
@@ -556,7 +555,7 @@ def is_less_than(left: Value, right: Value) -> DreamberdBoolean:
         case (DreamberdKeyword(), DreamberdKeyword()) | \
              (DreamberdObject(), DreamberdObject()) | \
              (DreamberdFunction(), DreamberdFunction()):
-            raise InterpretationError(f"Comparison not supported between elements of type {type(left).__name__}.")
+            raise_error_at_line(filename, code, current_line, f"Comparison not supported between elements of type {type(left).__name__}."); raise
     return DreamberdBoolean(None)
 
 def perform_single_value_operation(val: Value, operator_token: Token) -> Value: 
@@ -570,7 +569,7 @@ def perform_single_value_operation(val: Value, operator_token: Token) -> Value:
                 case DreamberdString():
                     return DreamberdString(val.value[::-1])
                 case _:
-                    raise_error_at_token(filename, code, f"Cannot negate a value of type {type(val).__name__}", operator_token)
+                    raise_error_at_token(filename, code, f"Cannot negate a value of type {type(val).__name__}", operator_token); raise
         case TokenType.SEMICOLON:
             val_bool = db_to_boolean(val)
             return db_not(val_bool) 
@@ -591,7 +590,7 @@ def perform_two_value_operation(left: Value, right: Value, operator: OperatorTyp
                 if operator == OperatorType.DIV and abs(right_num.value) < FLOAT_TO_INT_PREC: # pretty much zero
                     return DreamberdUndefined() 
                 elif operator == OperatorType.EXP and left_num.value < -FLOAT_TO_INT_PREC and not is_int(right_num.value):
-                    raise InterpretationError("Cannot raise a negative base to a non-integer exponent.")
+                    raise_error_at_line(filename, code, current_line, "Cannot raise a negative base to a non-integer exponent."); raise
                 match operator:
                     case OperatorType.SUB: result = left_num.value - right_num.value
                     case OperatorType.MUL: result = left_num.value * right_num.value
@@ -651,10 +650,10 @@ def perform_two_value_operation(left: Value, right: Value, operator: OperatorTyp
         raise_error_at_token(filename, code, str(e), operator_token)  # the operator token is the best that you are gonna get
     raise_error_at_token(filename, code, "Something went wrong here.", operator_token); raise
 
-def get_value_from_namespaces(name_or_value: str, namespaces: list[Namespace]) -> Value:
+def get_value_from_namespaces(name_or_value: Token, namespaces: list[Namespace]) -> Value:
 
     # what the fuck am i doing rn
-    if v := get_name_from_namespaces(name_or_value, namespaces):
+    if v := get_name_from_namespaces(name_or_value.value, namespaces):
         if isinstance(v.value, DreamberdPromise):
             return deepcopy(get_value_from_promise(v.value))  # consider not deepcopying this but it doesnt really matter
         return v.value
@@ -737,7 +736,7 @@ def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces
                 if caller:  # seems like a needless check but it makes the errors go away
                     caller_var = get_name_from_namespaces(caller, namespaces)
                     if isinstance(caller_var, Variable) and not caller_var.can_edit_value:
-                        raise InterpretationError("Cannot edit the value of this variable.")
+                        raise_error_at_line(filename, code, current_line, "Cannot edit the value of this variable."); raise
 
                 retval = evaluate_normal_function(expr, func.value, namespaces, args, when_statement_watchers)
                 when_watchers = get_code_from_when_statement_watchers(id(args[0]), when_statement_watchers)
@@ -755,13 +754,13 @@ def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces
         case ValueNode():  # done :)
             if expr.name_or_value.type == TokenType.STRING: 
                 return DreamberdString(expr.name_or_value.value)
-            return get_value_from_namespaces(expr.name_or_value.value, namespaces)
+            return get_value_from_namespaces(expr.name_or_value, namespaces)
 
         case IndexNode():  # done :)
             value = evaluate_expression(expr.value, namespaces, async_statements, when_statement_watchers)
             index = evaluate_expression(expr.index, namespaces, async_statements, when_statement_watchers)
             if not isinstance(value, DreamberdIndexable):
-                raise InterpretationError("Attempting to index a value that is not indexable.") 
+                raise_error_at_line(filename, code, current_line, "Attempting to index a value that is not indexable."); raise
             return value.access_index(index)
 
         case ExpressionNode():  # done :)
@@ -811,7 +810,7 @@ def handle_next_expressions(expr: ExpressionTreeNode, namespaces: list[Namespace
                     name = expr.args[0].name_or_value.value
                     _, ns = get_name_and_namespace_from_namespaces(name, namespaces)
                     if not ns:
-                        raise InterpretationError("Attempted to access namespace of a value without a namespace.")
+                        raise_error_at_line(filename, code, current_line, "Attempted to access namespace of a value without a namespace."); raise
                     last_name = name.split('.')[-1]
                     normal_nexts.add((name, id(ns)))
                     expr = expr.args[0]
@@ -833,7 +832,7 @@ def handle_next_expressions(expr: ExpressionTreeNode, namespaces: list[Namespace
                         name = inner_expr.args[0].name_or_value.value 
                         _, ns = get_name_and_namespace_from_namespaces(name, namespaces)
                         if not ns:
-                            raise InterpretationError("Attempted to access namespace of a value without a namespace.")
+                            raise_error_at_line(filename, code, current_line, "Attempted to access namespace of a value without a namespace."); raise
                         last_name = name.split('.')[-1]
                         async_nexts.add(name)  # only need to store the name for the async ones because we are going to wait anyways
                         expr = inner_expr.args[0]
@@ -887,7 +886,7 @@ def save_previous_values_next_expr(expr_to_modify: ExpressionTreeNode, nexts: se
                 return {}
             val = get_name_from_namespaces(name, namespaces)
             if not val:
-                val = Name("", determine_non_name_value(name))
+                val = Name("", determine_non_name_value(expr_to_modify.name_or_value))
             mod_name = get_modified_prev_name(name)
             expr_to_modify.name_or_value.value = mod_name
             return {mod_name: Name(mod_name, val.value)}
@@ -983,13 +982,13 @@ def adjust_for_normal_nexts(statement: CodeStatementWithExpression, async_nexts:
     for name, old_len in zip(async_nexts, old_async_vals):
         v, ns = get_name_and_namespace_from_namespaces(name, namespaces)
         if not v or not ns or (old_len is not None and not isinstance(v, Variable)):
-            raise InterpretationError("Something went wrong with accessing the next value of a variable.")
+            raise_error_at_line(filename, code, current_line, "Something went wrong with accessing the next value of a variable."); raise
         mod_name = get_modified_next_name(name, id(ns))
         match old_len:
             case None: new_namespace[mod_name] = Name(mod_name, v.value if isinstance(v, Name) else v.prev_values[0])
             case i:
                 if not isinstance(v, Variable):
-                    raise InterpretationError("Something went wrong.")
+                    raise_error_at_line(filename, code, current_line, "Something went wrong."); raise
                 new_namespace[mod_name] = Name(mod_name, v.prev_values[i])
 
     # now, adjust for any values that may have already been modified by next statements 
@@ -1003,7 +1002,7 @@ def adjust_for_normal_nexts(statement: CodeStatementWithExpression, async_nexts:
             case None: new_namespace[mod_name] = Name(mod_name, v.value if isinstance(v, Name) else v.prev_values[0])
             case i:
                 if not isinstance(v, Variable):
-                    raise InterpretationError("Something went wrong.")
+                    raise_error_at_line(filename, code, current_line, "Something went wrong."); raise
                 new_namespace[mod_name] = Name(mod_name, v.prev_values[i])
 
     # the remaining values are still waiting on a result, add these to the list of name watchers
@@ -1031,13 +1030,13 @@ def wait_for_async_nexts(async_nexts: set[str], namespaces: list[Namespace]) -> 
     for name, old_len in zip(async_nexts, old_async_vals):
         v, ns = get_name_and_namespace_from_namespaces(name, namespaces)
         if not v or not ns or (old_len is not None and not isinstance(v, Variable)):
-            raise InterpretationError("Something went wrong with accessing the next value of a variable.")
+            raise_error_at_line(filename, code, current_line, "Something went wrong with accessing the next value of a variable."); raise 
         mod_name = get_modified_next_name(name, id(ns))
         match old_len:
             case None: new_namespace[mod_name] = Name(mod_name, v.value if isinstance(v, Name) else v.prev_values[0])
             case i:
                 if not isinstance(v, Variable):
-                    raise InterpretationError("Something went wrong.")
+                    raise_error_at_line(filename, code, current_line, "Something went wrong."); raise
                 new_namespace[mod_name] = Name(mod_name, v.prev_values[i])
     return new_namespace
 
@@ -1052,7 +1051,7 @@ def interpret_name_watching_statement(statement: CodeStatementWithExpression, na
     match statement:
         case ReturnStatement():
             if promise is None:
-                raise InterpretationError("Something went wrong.")
+                raise_error_at_line(filename, code, current_line, "Something went wrong."); raise
             promise.value = expr_val  # simply change the promise to that value as the return statement already returned a promise
         case VariableDeclaration():
             declare_new_variable(statement, expr_val, namespaces, async_statements, when_statement_watchers)
@@ -1094,10 +1093,10 @@ def get_keyboard_event_object(key: Optional[Union[keyboard.Key, keyboard.KeyCode
 def execute_after_statement(event: Value, statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], when_statement_watchers: WhenStatementWatchers) -> None:
 
     if not KEY_MOUSE_IMPORTED:
-        raise InterpretationError("Attempted to use mouse and keyboard functionality without importing the [input] extra dependency.")
+        raise_error_at_line(filename, code, current_line, "Attempted to use mouse and keyboard functionality without importing the [input] extra dependency."); raise
 
     if not isinstance(event, DreamberdString):
-        raise InterpretationError(f"Invalid event for the \"after\" statement: \"{db_to_string(event)}\"")
+        raise_error_at_line(filename, code, current_line, f"Invalid event for the \"after\" statement: \"{db_to_string(event)}\""); raise
 
     match event.value:
         case "mouseclick":
@@ -1152,12 +1151,12 @@ def execute_after_statement(event: Value, statements_inside_scope: list[tuple[Co
             listener = keyboard.Listener(on_click=listener_func)  # type: ignore
 
         case _:
-            raise InterpretationError(f"Invalid event for the \"after\" statement: \"{db_to_string(event)}\"")
+            raise_error_at_line(filename, code, current_line, f"Invalid event for the \"after\" statement: \"{db_to_string(event)}\""); raise
 
     listener.start()
 
-def gather_names_or_values(expr: ExpressionTreeNode) -> set[str]:
-    names: set[str] = set()
+def gather_names_or_values(expr: ExpressionTreeNode) -> set[Token]:
+    names: set[Token] = set()
     match expr:
         case FunctionNode():
             for arg in expr.args:
@@ -1172,7 +1171,7 @@ def gather_names_or_values(expr: ExpressionTreeNode) -> set[str]:
         case SingleOperatorNode():
             names |= gather_names_or_values(expr.expression)
         case ValueNode():
-            names.add(expr.name_or_value.value)
+            names.add(expr.name_or_value)
     return names
 
 def register_when_statement(condition: Union[list[Token], ExpressionTreeNode], statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
@@ -1181,9 +1180,9 @@ def register_when_statement(condition: Union[list[Token], ExpressionTreeNode], s
     # if the internal value is a list, store it as an address to that mutable type.
     built_condition = get_built_expression(condition)
     gathered_names = gather_names_or_values(built_condition)
-    caller_names = [n for name in gathered_names if (n := '.'.join(name.split('.')[:-1]))]
-    dict_keys = [id(v) if isinstance(v := get_name_from_namespaces(name, namespaces), Variable) else name for name in gathered_names]\
-                + [id(v.value) for name in gathered_names if (v := get_name_from_namespaces(name, namespaces)) is not None and isinstance(v.value, DreamberdMutable)]\
+    caller_names = [n for name in gathered_names if (n := '.'.join(name.value.split('.')[:-1]))]
+    dict_keys = [id(v) if isinstance(v := get_name_from_namespaces(name.value, namespaces), Variable) else name.value for name in gathered_names]\
+                + [id(v.value) for name in gathered_names if (v := get_name_from_namespaces(name.value, namespaces)) is not None and isinstance(v.value, DreamberdMutable)]\
                 + [id(v) for name in caller_names if isinstance(v := get_name_from_namespaces(name, namespaces), Variable)]\
                 + [id(v.value) for name in caller_names if (v := get_name_from_namespaces(name, namespaces)) is not None and isinstance(v.value, DreamberdMutable)]\
 
@@ -1232,7 +1231,7 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
         match statement:  # this is here to make sure everything is going somewhat smoothly
             case VariableAssignment() | VariableDeclaration() | Conditional() | AfterStatement() | ExpressionStatement(): pass
             case _:
-                raise InterpretationError("Something went wrong. It's not your fault, it's mine.")
+                raise_error_at_line(filename, code, current_line, "Something went wrong. It's not your fault, it's mine."); raise
         adjust_for_normal_nexts(statement, all_async_nexts, all_normal_nexts, None, namespaces, prev_namespace)
         return   # WE ARE EXITING HERE!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -1260,7 +1259,7 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
             val, ns = get_name_and_namespace_from_namespaces(statement.name.value, namespaces)
             if val and ns:
                 del ns[statement.name.value]
-            deleted_values.add(determine_non_name_value(statement.name.value))
+            deleted_values.add(determine_non_name_value(statement.name))
 
         case ExpressionStatement():
             val = evaluate_expression(statement.expression, namespaces, async_statements, when_statement_watchers)
@@ -1294,13 +1293,13 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
             def class_object_closure(*args: Value) -> DreamberdObject:
                 nonlocal instance_made, class_namespace, class_name
                 if instance_made:
-                    raise InterpretationError(f"Already made instance of the class \"{class_name}\".")
+                    raise_error_at_line(filename, code, current_line, f"Already made instance of the class \"{class_name}\"."); raise
                 instance_made = True 
                 if constructor := class_namespace.get(class_name.value):
                     if not isinstance(func := constructor.value, DreamberdFunction):
-                        raise InterpretationError("Cannot create class variable with the same name as the class.")
+                        raise_error_at_line(filename, code, current_line, "Cannot create class variable with the same name as the class."); raise
                     if len(func.args) > len(args):
-                        raise InterpretationError(f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.")
+                        raise_error_at_line(filename, code, current_line, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}."); raise
                     new_namespace: Namespace = {name: Name(name, arg) for name, arg in zip(func.args, args)}
                     interpret_code_statements(func.code, namespaces + [new_namespace], [], when_statement_watchers + [{}])
                     del class_namespace[class_name.value]  # remove the constructor
@@ -1317,7 +1316,7 @@ def fill_class_namespace(statements: list[tuple[CodeStatement, ...]], namespaces
         match statement:
             case FunctionDefinition():
                 if "this" in statement.args:
-                    raise InterpretationError("\"this\" keyword not allowed in class function declaration arguments.")
+                    raise_error_at_line(filename, code, current_line, "\"this\" keyword not allowed in class function declaration arguments."); raise
                 class_namespace[statement.name.value] = Name(statement.name.value, DreamberdFunction(
                     args = ["this"] + [arg.value for arg in statement.args],    # i need to somehow make the this keyword actually do something
                     code = statement.code,
@@ -1329,7 +1328,7 @@ def fill_class_namespace(statements: list[tuple[CodeStatement, ...]], namespaces
                 var_expr = evaluate_expression(statement.expression, namespaces, async_statements, [{}]) 
                 declare_new_variable(statement, var_expr, [class_namespace], async_statements, [{}])  # don't want anything happening here, it's a different name
             case _:
-                raise InterpretationError(f"Unexpected statement of type {type(statement).__name__} in class declaration.")
+                raise_error_at_line(filename, code, current_line, f"Unexpected statement of type {type(statement).__name__} in class declaration."); raise
 
 # cleanup out of date variables
 def decrement_variable_lifetimes(namespaces: list[Namespace]) -> None:
@@ -1340,6 +1339,24 @@ def decrement_variable_lifetimes(namespaces: list[Namespace]) -> None:
             for l in v.lifetimes:
                 l.lines_left -= 1 
             v.clear_outdated_lifetimes()
+
+def edit_current_line_number(statement: CodeStatement) -> None:
+    global current_line
+    match statement:
+        case CodeStatementKeywordable(): 
+            current_line = statement.keyword.line
+        case FunctionDefinition():
+            current_line = statement.keywords[0].line 
+        case VariableDeclaration():
+            current_line = statement.modifiers[0].line 
+        case VariableAssignment():
+            current_line = statement.name.line
+        case ReturnStatement(): 
+            if statement.keyword:
+                current_line = statement.keyword.line
+        case ExpressionStatement():
+            if t := get_expr_first_token(get_built_expression(statement.expression)):
+                current_line = t.line
 
 # if a return statement is found, this will return the expression evaluated at the return. otherwise, it will return None
 # this is done to allow this function to be called when evaluating dreamberd functions
@@ -1352,8 +1369,9 @@ def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], names
 
         # if no statement found -i.e. the user did something wrong
         if statement is None:
-            raise InterpretationError("Error parsing statement. Try again.")
-        elif isinstance(statement, ReturnStatement):  # if working with a return statement, either return a promise or a value
+            raise_error_at_line(filename, code, current_line, "Error parsing statement. Try again."); raise
+        edit_current_line_number(statement)
+        if isinstance(statement, ReturnStatement):  # if working with a return statement, either return a promise or a value
             expr, normal_nexts, async_nexts = handle_next_expressions(get_built_expression(statement.expression), namespaces)
             prev_namespaces = save_previous_values_next_expr(expr, async_nexts | {s[0] for s in normal_nexts}, namespaces)
             if normal_nexts:
@@ -1377,17 +1395,18 @@ def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], names
                 continue
             statement = determine_statement_type(async_st.pop(0), async_ns)
             if statement is None:
-                raise InterpretationError("Error parsing statement. Try again.")
+                raise_error_at_line(filename, code, current_line, "Error parsing statement. Try again."); raise
             elif isinstance(statement, ReturnStatement):
-                raise InterpretationError("Function executed asynchronously cannot have a return statement.")
+                raise_error_at_line(filename, code, current_line, "Function executed asynchronously cannot have a return statement."); raise
             interpret_statement(statement, async_ns, async_statements, when_statement_watchers)
     
 # btw, reason async_statements and when_statements cannot be global is because they change depending on scope,
 # due to (possibly bad) design decisions, the name_watchers does not do this... :D
 def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _deleted_values: set[Value]):
-    global filename, code, name_watchers, deleted_values  # screw bad practice, not like anyone's using this anyways
+    global filename, code, name_watchers, deleted_values, current_line  # screw bad practice, not like anyone's using this anyways
     filename = _filename 
     code = _code
     name_watchers = _name_watchers 
     deleted_values = _deleted_values
+    current_line = 1
     

@@ -12,6 +12,7 @@ from dreamberd.interpreter import interpret_code_statements, load_global_dreambe
 __all__ = ['run_repl', 'run_file']
 
 __REPL_FILENAME = "__repl__"
+sys.setrecursionlimit(100000)
 
 def __get_next_repl_input(closed_scope_layers: int = 0) -> tuple[str, list[Token]]:
     print("   " * closed_scope_layers, '\033[33m>\033[39m ', end="", sep="")

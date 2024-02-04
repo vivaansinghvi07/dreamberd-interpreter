@@ -1,5 +1,0 @@
-var var i = 1!
-when (i < 10) {
-   print i!
-   i = i + 1!
-}

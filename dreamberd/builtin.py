@@ -100,6 +100,7 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
             raise InterpretationError("Cannot index a list with a non-number value.")
         if is_int(index.value):
             if not -1 <= index.value <= len(self.values) - 1:
+                print(index, len(self.values))
                 raise InterpretationError("Indexing out of list bounds.")
             self.values[round(index.value) + 1] = val
         else:  # assign in the middle of the array

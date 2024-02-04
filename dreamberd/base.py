@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 ALPH_NUMS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.')
 
@@ -107,13 +107,14 @@ class OperatorType(Enum):
 STR_TO_OPERATOR = {op.value: op for op in OperatorType}
 
 # why do i even need a damn class for this 
-@dataclass
+# 3 weeks later, i am very glad i made a class for this
+@dataclass(unsafe_hash=True)
 class Token():
 
     type: TokenType
     value: str 
-    line: int
-    col: int
+    line: int = field(hash=False)
+    col: int = field(hash=False)
 
     def __repr__(self) -> str:
         return f"Token({self.type}, {repr(self.value)})"
