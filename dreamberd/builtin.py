@@ -386,4 +386,10 @@ BUILTIN_FUNCTION_KEYWORDS = {
     "exit": Name("exit", BuiltinFunction(0, db_exit)),
     "Number": Name("Number", BuiltinFunction(1, db_to_number))
 }
-KEYWORDS |= BUILTIN_FUNCTION_KEYWORDS
+BUILTIN_VALUE_KEYWORDS = {
+    "true": Name("true", DreamberdBoolean(True)),
+    "maybe": Name("maybe", DreamberdBoolean(None)),
+    "false": Name("false", DreamberdBoolean(False)),
+    "undefined": Name("undefined", DreamberdUndefined())
+}
+KEYWORDS |= BUILTIN_FUNCTION_KEYWORDS | BUILTIN_VALUE_KEYWORDS
