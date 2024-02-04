@@ -29,6 +29,8 @@ const const name<-2> = "Jake";
 
 ### Storing Public Global Variables 
 
+Thanks to [this repo](https://github.com/marcizhu/marcizhu) for helpful reference for issues and actions in Python.
+
 To store public globals, the following steps are taken:
 - On the user's side, open a GitHub issue with a title of the format `Create Public Global: {name};;;{confidence}` and the body containing the pickled version of the value.
 - Then, run a GitHub workflow that puts the issue body into a file under `global_objects/` and add an entry to `public_globals.txt` that contains the `name;;;id;;;confidence`
