@@ -1,4 +1,7 @@
 from __future__ import annotations
+import functools
+
+import math
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
@@ -105,7 +108,6 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
             raise InterpretationError("Cannot index a list with a non-number value.")
         if is_int(index.value):
             if not -1 <= index.value <= len(self.values) - 1:
-                print(index, len(self.values))
                 raise InterpretationError("Indexing out of list bounds.")
             self.values[round(index.value) + 1] = val
         else:  # assign in the middle of the array
@@ -195,6 +197,9 @@ class DreamberdBoolean(Value):
 
 @dataclass 
 class DreamberdUndefined(Value):
+    pass
+@dataclass 
+class DreamberdSpecialBlankValue(Value):
     pass
 
 @dataclass 
@@ -374,9 +379,34 @@ def db_to_number(val: Value) -> DreamberdNumber:
             raise InterpretationError(f"Cannot turn type {type(val).__name__} into a number.")
     return DreamberdNumber(return_number)
 
+def db_signal(starting_value: Value) -> Value:
+    obj = Name('', starting_value)
+    def signal_func(setter_val: Value) -> Optional[Value]:
+        nonlocal obj
+        if isinstance(setter_val, DreamberdSpecialBlankValue):
+            return obj.value
+        obj.value = setter_val
+    return BuiltinFunction(1, signal_func)
+
 def db_exit() -> None:
     exit()
 
+def __math_function_decorator(func: Callable):
+    @functools.wraps(func)
+    def inner(*args):  # no kwargs
+        for arg in args:
+            if not isinstance(arg, DreamberdNumber):
+                raise InterpretationError("Cannot pass in a non-number value into a math function.")
+        return func(*[arg.value for arg in args])
+    return inner
+
+# get ready, this is boutta be crazy
+MATH_FUNCTION_KEYWORDS = {
+    name: Name(name, BuiltinFunction((-1 if any([arg[0] == '*' and len(arg) > 1 for arg in v.__text_signature__[1:-1].split(', ')]) 
+                                         else len([arg for arg in v.__text_signature__[1:-1].split(', ') if arg.isalpha()])) 
+        if v.__text_signature__ else 1 if name == 'log' else -1, __math_function_decorator(v)) 
+    if isinstance(v := getattr(math, name), type(math.ulp)) else DreamberdNumber(v)) for name in dir(math) if not name.startswith('__')
+}  # the fuck is this
 BUILTIN_FUNCTION_KEYWORDS = {
     "new": Name("new", BuiltinFunction(1, db_new)),
     "Map": Name("new", BuiltinFunction(0, db_map)),
@@ -384,12 +414,14 @@ BUILTIN_FUNCTION_KEYWORDS = {
     "String": Name("String", BuiltinFunction(1, db_to_string)),
     "print": Name("print", BuiltinFunction(-1, db_print)),
     "exit": Name("exit", BuiltinFunction(0, db_exit)),
-    "Number": Name("Number", BuiltinFunction(1, db_to_number))
+    "Number": Name("Number", BuiltinFunction(1, db_to_number)),
+    "use": Name("use", BuiltinFunction(1, db_signal))
 }
 BUILTIN_VALUE_KEYWORDS = {
     "true": Name("true", DreamberdBoolean(True)),
     "maybe": Name("maybe", DreamberdBoolean(None)),
     "false": Name("false", DreamberdBoolean(False)),
-    "undefined": Name("undefined", DreamberdUndefined())
+    "undefined": Name("undefined", DreamberdUndefined()),
+    "": Name("", DreamberdSpecialBlankValue())
 }
-KEYWORDS |= BUILTIN_FUNCTION_KEYWORDS | BUILTIN_VALUE_KEYWORDS
+KEYWORDS |= BUILTIN_FUNCTION_KEYWORDS | BUILTIN_VALUE_KEYWORDS | MATH_FUNCTION_KEYWORDS

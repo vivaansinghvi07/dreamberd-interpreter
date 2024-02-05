@@ -71,7 +71,7 @@ def evaluate_normal_function(expr: FunctionNode, func: Union[DreamberdFunction, 
         if func.arg_count > len(args):
             raise_error_at_token(filename, code, f"Expected more arguments for function call with {func.arg_count} argument{'s' if func.arg_count == 1 else ''}.", expr.name); raise
         try:
-            max_arg_count = func.arg_count if func.arg_count != -1 else len(args)
+            max_arg_count = func.arg_count if func.arg_count >= 0 else len(args)
             return func.function(*args[:max_arg_count]) or DreamberdUndefined()
         except InterpretationError as e:  # some intentionally raised error
             raise_error_at_token(filename, code, str(e), expr.name); raise

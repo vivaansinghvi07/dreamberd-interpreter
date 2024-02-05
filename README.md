@@ -43,7 +43,6 @@ options:
   locale.localeconv()['currency_symbol']
   ```
 - Better debugging (pretty limited for the time being)
-- Signals (not too hard)
 - A much better standard library
 - Type up more about the features like in the main repo
 
