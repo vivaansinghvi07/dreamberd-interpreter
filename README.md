@@ -45,6 +45,7 @@ options:
 - Better debugging (pretty limited for the time being)
 - A much better standard library
 - Type up more about the features like in the main repo
+- Fix the problem with async functions only going once
 
 ## Features
 
