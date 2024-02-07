@@ -18,12 +18,16 @@ def db_not(x: DreamberdBoolean) -> DreamberdBoolean:
         return DreamberdBoolean(None)
     return DreamberdBoolean(not x.value)
 
-def db_list_push(self, val: Value) -> None:
+def db_list_push(self: DreamberdList, val: Value) -> None:
     self.values.append(val) 
     self.create_namespace()  # update the length
 
-def db_list_pop(self, index: DreamberdNumber) -> Value:
-    if not isinstance(index, DreamberdNumber) or not is_int(index.value):
+def db_list_pop(self: DreamberdList, index: Union[DreamberdNumber, DreamberdSpecialBlankValue]) -> Value:
+    if isinstance(index, DreamberdSpecialBlankValue):
+        retval = self.values.pop()
+        self.create_namespace()
+        return retval
+    elif not isinstance(index, DreamberdNumber) or not is_int(index.value):
         raise InterpretationError("Expected integer for list popping.")
     elif not -1 <= index.value <= len(self.values) - 1:
         raise InterpretationError("Indexing out of list bounds.")
@@ -31,10 +35,24 @@ def db_list_pop(self, index: DreamberdNumber) -> Value:
     self.create_namespace()
     return retval
 
-def db_str_push(self, val: Value) -> None:
+def db_str_push(self: DreamberdString, val: Value) -> None:
     val_str = db_to_string(val).value
     self.value += val_str 
     self.create_namespace()  # update the length
+
+def db_str_pop(self: DreamberdString, index: Union[DreamberdNumber, DreamberdSpecialBlankValue]) -> Value:
+    if isinstance(index, DreamberdSpecialBlankValue):
+        retval = self.value[-1]
+        self.value = self.value[:-1]
+        return DreamberdString(retval)
+    elif not isinstance(index, DreamberdNumber) or not is_int(index.value):
+        raise InterpretationError("Expected integer for string popping.")
+    elif not -1 <= index.value <= len(self.value) - 1:
+        raise InterpretationError("Indexing out of string bounds.")
+    index_val = round(index.value) + 1
+    retval = self.value[index_val]
+    self.value = self.value[:index_val] + self.value[index_val + 1:]
+    return DreamberdString(retval)
 
 # class Value(metaclass=ABCMeta):   # TODO POTENTIALLY DO THIS TO ALLOW FOR MORE OBJECTS WITHOUT MUCH HASSLE
 #     @abstractmethod 
@@ -111,7 +129,7 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
                 raise InterpretationError("Indexing out of list bounds.")
             self.values[round(index.value) + 1] = val
         else:  # assign in the middle of the array
-            nearest_int_down = max((index.value + 1) // 1, 0)
+            nearest_int_down = round(max((index.value + 1) // 1, 0))
             self.values[nearest_int_down:nearest_int_down] = [val]
             self.create_namespace()
 
@@ -305,8 +323,8 @@ KEYWORDS = {kw: Name(kw, DreamberdKeyword(kw)) for kw in ['class', 'className', 
 ##           DREAMBERD BUILTINS           ##
 ############################################
 
-# the new function does absolutely nothing, lol
-def db_new(val: Value) -> Value:
+# this is for functions that return the same value, like current or new
+def db_identity(val: Value) -> Value:
     return val
 
 def db_map() -> DreamberdMap:
@@ -400,6 +418,14 @@ def __math_function_decorator(func: Callable):
         return func(*[arg.value for arg in args])
     return inner
 
+def __number_function_maker(num: int) -> BuiltinFunction:
+    def the_func(n: DreamberdNumber) -> DreamberdNumber:
+        nonlocal num
+        if not isinstance(n, DreamberdNumber):
+            raise InterpretationError(f"Expected a number in the ones digit. Instead received a {type(n).__name__}")
+        return DreamberdNumber(num + n.value)
+    return BuiltinFunction(1, the_func)
+
 # get ready, this is boutta be crazy
 MATH_FUNCTION_KEYWORDS = {
     name: Name(name, BuiltinFunction((-1 if any([arg[0] == '*' and len(arg) > 1 for arg in v.__text_signature__[1:-1].split(', ')]) 
@@ -408,8 +434,9 @@ MATH_FUNCTION_KEYWORDS = {
     if isinstance(v := getattr(math, name), type(math.ulp)) else DreamberdNumber(v)) for name in dir(math) if not name.startswith('__')
 }  # the fuck is this
 BUILTIN_FUNCTION_KEYWORDS = {
-    "new": Name("new", BuiltinFunction(1, db_new)),
-    "Map": Name("new", BuiltinFunction(0, db_map)),
+    "new": Name("new", BuiltinFunction(1, db_identity)),
+    "current": Name("current", BuiltinFunction(1, db_identity)),
+    "Map": Name("Map", BuiltinFunction(0, db_map)),
     "Boolean": Name("Boolean", BuiltinFunction(1, db_to_boolean)),
     "String": Name("String", BuiltinFunction(1, db_to_string)),
     "print": Name("print", BuiltinFunction(-1, db_print)),
@@ -424,4 +451,12 @@ BUILTIN_VALUE_KEYWORDS = {
     "undefined": Name("undefined", DreamberdUndefined()),
     "": Name("", DreamberdSpecialBlankValue())
 }
-KEYWORDS |= BUILTIN_FUNCTION_KEYWORDS | BUILTIN_VALUE_KEYWORDS | MATH_FUNCTION_KEYWORDS
+NUMBER_NAME_KEYWORDS = {
+    name: Name(name, DreamberdNumber(num)) for num, name in enumerate(["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+     "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "ninteen"])
+} | {
+    name: Name(name, __number_function_maker(num)) for num, name in zip(range(20, 100, 10), ["twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"])
+}  # this is so cursed
+
+KEYWORDS |= BUILTIN_FUNCTION_KEYWORDS | BUILTIN_VALUE_KEYWORDS | MATH_FUNCTION_KEYWORDS |\
+            NUMBER_NAME_KEYWORDS

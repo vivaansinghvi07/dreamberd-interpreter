@@ -49,9 +49,12 @@ def run_repl() -> None:
     async_statements = []
     when_statement_watchers = [{}]
     while True: 
-        code, tokens = __get_next_repl_input()
-        statements = generate_syntax_tree(__REPL_FILENAME, tokens, code)
-        interpret_code_statements(statements, namespaces, async_statements, when_statement_watchers)
+        try:
+            code, tokens = __get_next_repl_input()
+            statements = generate_syntax_tree(__REPL_FILENAME, tokens, code)
+            interpret_code_statements(statements, namespaces, async_statements, when_statement_watchers)
+        except InterpretationError as e:
+            print(e)
             
 def run_file(filename: str) -> None:  # idk what else to call this
 
@@ -75,12 +78,12 @@ def run_file(filename: str) -> None:  # idk what else to call this
 def parse_args():
     parser = ArgumentParser()
     parser.add_argument('file', help="The file containing your DreamBerd code.", nargs='?', default='', type=str)
-    parser.add_argument('-s', '--suppress-traceback', help="Limit the error traceback to a single message.", action="store_true")
+    parser.add_argument('-s', '--show-traceback', help="Limit the error traceback to a single message.", action="store_true")
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    if args.suppress_traceback:
+    if not args.show_traceback:
         sys.tracebacklimit = 0
     if not args.file:
         run_repl()

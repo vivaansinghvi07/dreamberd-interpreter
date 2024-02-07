@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import NoReturn
 from dataclasses import dataclass, field
 
 ALPH_NUMS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.')
@@ -11,7 +12,8 @@ class InterpretationError(Exception):
 
 def debug_print(filename: str, code: str, message: str, token: Token) -> None:
     if not code:  # adjust for repl-called code
-        print(message)
+        print(f'\n\033[33m{message}\033[39\n', sep="")
+        return
     line = token.line
     num_carrots, num_spaces = len(token.value), token.col - len(token.value) + 1
     debug_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
@@ -25,9 +27,9 @@ def debug_print_no_token(filename: str, message: str) -> None:
                    f"\033[33m{message}\033[39m"
     print('\n', debug_string, '\n', sep="")
 
-def raise_error_at_token(filename: str, code: str, message: str, token: Token) -> None:
+def raise_error_at_token(filename: str, code: str, message: str, token: Token) -> NoReturn:
     if not code:  # adjust for repl-called code
-        raise InterpretationError(message)
+        raise InterpretationError(f"\n\033[31m{message}\033[39m\n")
     line = token.line
     num_carrots, num_spaces = len(token.value), token.col - len(token.value) + 1
     error_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
@@ -36,9 +38,9 @@ def raise_error_at_token(filename: str, code: str, message: str, token: Token) -
                    f"\033[31m{message}\033[39m"
     raise InterpretationError(error_string)
 
-def raise_error_at_line(filename: str, code: str, line: int, message: str) -> None:
+def raise_error_at_line(filename: str, code: str, line: int, message: str) -> NoReturn:
     if not code:  # adjust for repl-called code
-        raise InterpretationError(message)
+        raise InterpretationError(f"\n\033[31m{message}\033[39m\n")
     error_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
                    f"  {code.split(chr(10))[line - 1]}\n" + \
                    f"\033[31m{message}\033[39m"

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dreamberd"
-version = "0.0.3"
+version = "0.0.4"
 description = "An interpreter for the perfect programming language, DreamBerd."
 readme = "README.md"
 authors = ["Vivaan Singhvi <singhvi.vivaan@gmail.com>"]
