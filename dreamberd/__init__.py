@@ -77,8 +77,8 @@ def run_file(filename: str) -> None:  # idk what else to call this
 
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument('file', help="The file containing your DreamBerd code.", nargs='?', default='', type=str)
-    parser.add_argument('-s', '--show-traceback', help="Limit the error traceback to a single message.", action="store_true")
+    parser.add_argument('file', help="the file containing your DreamBerd code", nargs='?', default='', type=str)
+    parser.add_argument('-s', '--show-traceback', help="show the full Python trackback upon errors", action="store_true")
     return parser.parse_args()
 
 def main():

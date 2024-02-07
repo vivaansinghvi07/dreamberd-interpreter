@@ -23,12 +23,11 @@ Now that you have installed DreamBerd, you can run the REPL using the `$ dreambe
 usage: dreamberd [-h] [-s] [file]
 
 positional arguments:
-  file                  The file containing your DreamBerd code.
+  file                  the file containing your DreamBerd code
 
 options:
   -h, --help            show this help message and exit
-  -s, --suppress-traceback
-                        Limit the error traceback to a single message.
+  -s, --show-traceback  show the full Python trackback upon errors
 ```
 
 ## TODO 
