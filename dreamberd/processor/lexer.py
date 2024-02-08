@@ -88,7 +88,7 @@ def tokenize(filename: str, code: str) -> list[Token]:
                         value += '='
                         curr += 1
                     add_to_tokens(tokens, line_count, curr - start, TokenType.EQUAL, value)
-            case '"' | "'":
+            case '"' | "'":  # TODO: fix lol
                 quote_count = 0
                 while code[curr] in "'\"":
                     quote_count += 1 if code[curr] == "'" else 2

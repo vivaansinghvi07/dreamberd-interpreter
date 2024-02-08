@@ -31,20 +31,16 @@ options:
 ```
 
 ## TODO 
+
 - Fix this expression: print  (f two  +  f three)????
 - Add reversing
 - Add different files exporting and importing things across ?
 - Allow escape characters in strings (currently you can't do \n)
 - Allow for empty strings (currently parsed as a string with >1 quotes)
-- Add string interpolation
-  - Use the locale module like this:
-  ```python3
-  locale.setlocale(locale.LC_ALL, locale.getdefaultlocale()[0])
-  locale.localeconv()['currency_symbol']
-  ```
 - Better debugging (pretty limited for the time being)
 - A much better standard library
 - Fix the problem with async functions only going once
+- Somehow, type hints cause lifetimes to be ignored. Why????
 
 ## Absent Features
 
@@ -394,11 +390,7 @@ print("Hello £{name}!")!
 print("Hello ¥{name}!")!
 ```
 
-And make sure to follow your local typographical norms.
-
-```javascript
-print("Hello {name}€!")!
-```
+> Note: It was specified in the original repo to allow developers to follow their local typographical norms. While I think I could, that is not something I want to do and therefore I will not do it.
 
 ### Types
 
