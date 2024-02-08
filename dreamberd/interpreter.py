@@ -7,6 +7,7 @@
 from __future__ import annotations
 import os
 import re
+import locale
 import random
 import pickle
 import requests
@@ -31,6 +32,7 @@ except ImportError:
 
 from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
 from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
+from dreamberd.processor.lexer import tokenize as db_tokenize
 from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
 from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExpressionStatement, FunctionDefinition, ReturnStatement, VariableAssignment, VariableDeclaration, WhenStatement
 
@@ -398,6 +400,39 @@ def get_name_and_namespace_from_namespaces(name: str, namespaces: list[Namespace
         return base_val, ns
     return None, namespaces[-1]
 
+def interpret_formatted_string(val: Token, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> DreamberdString:
+    val_string = val.value
+    locale.setlocale(locale.LC_ALL, locale.getlocale()[0])
+    symbol: str = locale.localeconv()['currency_symbol']  # type: ignore
+    if not any(indeces := [val_string[i:i+len(symbol)] == symbol for i in range(len(val_string) - len(symbol))]):
+        return DreamberdString(val_string)
+    try:
+        evaluated_values: list[tuple[str, tuple[int, int]]] = []  # [(str, (start, end))...]
+        for group_start_index in indeces:
+            if val_string[group_start_index + 1] == '{':
+                end_index = group_start_index + 1
+                bracket_layers = 1
+                while bracket_layers:  # if this errs, it will be caught and detected as invalid formatting
+                    end_index += 1
+                    if val_string[end_index] == '{':
+                        bracket_layers += 1 
+                    elif val_string[end_index] == '}':
+                        bracket_layers -= 1
+                
+                # end_index is now the index containing the bracket.
+                internal_tokens = db_tokenize(f"{filename}__interpolated_string", val_string[group_start_index + 2 : end_index ])
+                internal_expr = build_expression_tree(filename, internal_tokens, code)
+                internal_value = evaluate_expression(internal_expr, namespaces, async_statements, when_statement_watchers)
+                evaluated_values.append((db_to_string(internal_value).value, (group_start_index, end_index + 1)))
+
+        new_string = list(val_string)
+        for replacement, (start, end) in reversed(evaluated_values):
+            new_string[start:end] = replacement
+        return DreamberdString(''.join(new_string))
+                
+    except IndexError:
+        raise_error_at_line(filename, code, current_line, "Invalid interpolated string formatting.")
+
 def determine_non_name_value(val: Token) -> Value:
     """ 
     Takes a string/Token and determines if the value is a number, string, or invalid. 
@@ -763,7 +798,7 @@ def evaluate_expression_for_real(expr: Union[list[Token], ExpressionTreeNode], n
 
         case ValueNode():  # done :)
             if expr.name_or_value.type == TokenType.STRING: 
-                return DreamberdString(expr.name_or_value.value)
+                return interpret_formatted_string(expr.name_or_value, namespaces, async_statements, when_statement_watchers)
             return get_value_from_namespaces(expr.name_or_value, namespaces)
 
         case IndexNode():  # done :)
