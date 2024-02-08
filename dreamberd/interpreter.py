@@ -408,7 +408,7 @@ def interpret_formatted_string(val: Token, namespaces: list[Namespace], async_st
         return DreamberdString(val_string)
     try:
         evaluated_values: list[tuple[str, tuple[int, int]]] = []  # [(str, (start, end))...]
-        for group_start_index in indeces:
+        for group_start_index in [i for i in range(len(indeces)) if indeces[i]]:
             if val_string[group_start_index + 1] == '{':
                 end_index = group_start_index + 1
                 bracket_layers = 1
