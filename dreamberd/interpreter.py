@@ -2,7 +2,7 @@
 # because pyright (my nvim LSP) doesn't recognize the code terminating at the raise_error_at_token, so I add this 
 # to make sure it recognizes that and doesn't yell at me because I don't like being yelled at
 
-# thanks to mCoding, I have now discovered the NoReturn type, and pyright shuts up :))))))))))))))))
+# thanks to Indently, I have now discovered the NoReturn type, and pyright shuts up :))))))))))))))))
 
 from __future__ import annotations
 import os
