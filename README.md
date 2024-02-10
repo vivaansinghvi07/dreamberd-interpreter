@@ -32,14 +32,11 @@ options:
 
 ## TODO 
 
-- Fix this expression: print  (f two  +  f three)????
-- Add reversing
 - Add different files exporting and importing things across ?
 - Allow escape characters in strings (currently you can't do \n)
 - Allow for empty strings (currently parsed as a string with >1 quotes)
 - Better debugging (pretty limited for the time being)
 - A much better standard library
-- Fix the problem with async functions only going once
 - Somehow, type hints cause lifetimes to be ignored. Why????
 
 ## Absent Features
@@ -658,4 +655,4 @@ Lisp haters will also love it.
 (add (3, (add (5, 6)!
 ```
 
-
+Due to certain design decisions, `"("` is replaced with `" "` while `")"` is replaced with `""`.

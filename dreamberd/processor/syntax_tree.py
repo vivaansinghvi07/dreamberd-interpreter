@@ -65,10 +65,18 @@ class ReturnStatement(CodeStatement):
     keyword: Optional[Token]
     expression: Union[list[Token], ExpressionTreeNode]
     debug: int
+
+# name name !?
 @dataclass
 class DeleteStatement(CodeStatement, CodeStatementKeywordable):
     keyword: Token
     name: Token
+    debug: int
+
+# name!
+@dataclass
+class ReverseStatement(CodeStatement, CodeStatementKeywordable):
+    keyword: Token
     debug: int
 
 # expression !?   < virtually indistinguishable from a return statement from a parsing perspective
@@ -308,10 +316,13 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
     return tuple(possibilities)
 
 def create_unscoped_code_statement(filename: str, tokens: list[Token], without_whitespace: list[Token], code: str) -> tuple[CodeStatement, ...]: 
-    
+
     is_debug = tokens[-1].type == TokenType.QUESTION
     confidence = 0 if is_debug else len(tokens[-1].value)
     debug_level = 0 if not is_debug else len(tokens[-1].value)
+
+    if len(l := [t for t in tokens if t.type != TokenType.WHITESPACE]) == 2:
+        return (ReverseStatement(l[0], debug_level), ExpressionStatement(tokens[:-1], debug_level))
 
     # it's a function!!!!!!!!!!!!!!!!!
     if any(l := [t.type == TokenType.FUNC_POINT for t in tokens]):

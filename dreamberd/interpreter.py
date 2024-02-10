@@ -16,7 +16,7 @@ from pathlib import Path
 from copy import deepcopy
 from threading import Thread
 from difflib import SequenceMatcher
-from typing import Optional, TypeAlias, Union
+from typing import Literal, Optional, TypeAlias, Union, assert_never
 
 KEY_MOUSE_IMPORTED = True
 try: 
@@ -34,7 +34,7 @@ from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, 
 from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
 from dreamberd.processor.lexer import tokenize as db_tokenize
 from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
-from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExpressionStatement, FunctionDefinition, ReturnStatement, VariableAssignment, VariableDeclaration, WhenStatement
+from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExpressionStatement, FunctionDefinition, ReturnStatement, ReverseStatement, VariableAssignment, VariableDeclaration, WhenStatement
 
 # several "ratios" used in the approx equal function
 NUM_EQUALITY_RATIO = 0.1  # a-b / b 
@@ -54,7 +54,7 @@ DB_VAR_TO_VALUE_SEP = ";;;"  # i'm feeling fancy
 Namespace: TypeAlias = dict[str, Union[Variable, Name]]
 CodeStatementWithExpression: TypeAlias = Union[ReturnStatement, Conditional, ExpressionStatement, WhenStatement,
                                                VariableAssignment, AfterStatement, VariableDeclaration]
-AsyncStatements: TypeAlias = list[tuple[list[tuple[CodeStatement, ...]], list[Namespace]]]
+AsyncStatements: TypeAlias = list[tuple[list[tuple[CodeStatement, ...]], list[Namespace], int, Union[Literal[1], Literal[-1]]]]
 NameWatchers: TypeAlias = dict[tuple[str, int], tuple[CodeStatementWithExpression, set[tuple[str, int]], list[Namespace], Optional[DreamberdPromise]]]
 WhenStatementWatchers: TypeAlias = list[dict[Union[str, int], list[tuple[ExpressionTreeNode, list[tuple[CodeStatement, ...]]]]]]  # bro there are six square brackets...
 
@@ -91,7 +91,7 @@ def register_async_function(expr: FunctionNode, func: DreamberdFunction, namespa
     if len(func.args) > len(args):
         raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.", expr.name)
     function_namespaces = namespaces + [{name: Name(name, arg) for name, arg in zip(func.args, args)}]
-    async_statements.append((func.code, function_namespaces))
+    async_statements.append((func.code, function_namespaces, 0, 1))
 
 def get_code_from_when_statement_watchers(name_or_id: Union[str, int], when_statement_watchers: WhenStatementWatchers) -> list[tuple[ExpressionTreeNode, list[tuple[CodeStatement, ...]]]]:
     vals = []
@@ -961,7 +961,8 @@ def determine_statement_type(possible_statements: tuple[CodeStatement, ...], nam
         WhenStatement: {'when'},
         AfterStatement: {'after'},
         ClassDeclaration: {'class', 'className'},
-        DeleteStatement: {'delete'}
+        DeleteStatement: {'delete'},
+        ReverseStatement: {'reverse'}
     }
 
     for st in possible_statements:
@@ -1413,8 +1414,8 @@ def edit_current_line_number(statement: CodeStatement) -> None:
 # this is done to allow this function to be called when evaluating dreamberd functions
 def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> Optional[Value]:
 
-    curr = 0
-    while curr < len(statements): 
+    curr, direction = 0, 1
+    while 0 <= curr < len(statements): 
         decrement_variable_lifetimes(namespaces)
         statement = determine_statement_type(statements[curr], namespaces)
 
@@ -1434,21 +1435,29 @@ def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], names
             retval = evaluate_expression(expr, namespaces, async_statements, when_statement_watchers)
             clear_temp_namespace(namespaces, prev_namespaces)
             return retval
+        elif isinstance(statement, ReverseStatement):
+            direction = -direction
         
         # otherwise interpret the other statement, if there is a return value then return
-        retval = interpret_statement(statement, namespaces, async_statements, when_statement_watchers)
-        if retval: return retval
-        curr += 1
+        elif retval := interpret_statement(statement, namespaces, async_statements, when_statement_watchers):
+            return retval
+        curr += direction
 
         # emulate taking turns running all the "async" functions
-        for async_st, async_ns in async_statements:  
-            if not async_st:
+        for i in range(len(async_statements)):
+            async_st, async_ns, line_num, async_direction = async_statements[i]
+            if not 0 <= line_num < len(async_st):
                 continue
-            statement = determine_statement_type(async_st.pop(0), async_ns)
+
+            # this uesd to say async_st.pop(0) and i was genuinely wondering why it was changing, i'm so dumb
+            statement = determine_statement_type(async_st[line_num], async_ns)
             if statement is None:
                 raise_error_at_line(filename, code, current_line, "Error parsing statement. Try again.")
             elif isinstance(statement, ReturnStatement):
                 raise_error_at_line(filename, code, current_line, "Function executed asynchronously cannot have a return statement.")
+            elif isinstance(statement, ReverseStatement):
+                async_direction = -async_direction
+            async_statements[i] = (async_st, async_ns, line_num + async_direction, async_direction)  # messy but works
             interpret_statement(statement, async_ns, async_statements, when_statement_watchers)
     
 # btw, reason async_statements and when_statements cannot be global is because they change depending on scope,

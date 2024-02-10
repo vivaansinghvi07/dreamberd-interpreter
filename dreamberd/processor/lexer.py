@@ -8,6 +8,14 @@ from dreamberd.base import Token, TokenType, ALPH_NUMS, raise_error_at_line
 def add_to_tokens(token_list: list[Token], line: int, col: int, token: TokenType, value: Optional[str] = None):
     token_list.append(Token(token, value if value is not None else token.value, line, col))
 
+def get_effective_whitespace_value(char: str) -> str:
+    match char:
+        case " " | "(":
+            return " "
+        case "\t":
+            return char 
+    return ""
+    
 def tokenize(filename: str, code: str) -> list[Token]:
     code += '   '  # adding a space here so i dont have to write 10 damn checks for out of bounds
     line_count = 1
@@ -115,10 +123,9 @@ def tokenize(filename: str, code: str) -> list[Token]:
                     add_to_tokens(tokens, line_count, curr - start, TokenType.WHITESPACE, '')
                     curr += 1
                 else:
-                    value = code[curr] if code[curr] not in '()' else ' '
+                    value = get_effective_whitespace_value(code[curr])
                     while curr + 1 < len(code) and code[curr + 1] in ' ()\t':
-                        if code[curr + 1] not in "()":
-                            value += code[curr + 1]
+                        value += get_effective_whitespace_value(code[curr + 1])
                         curr += 1
                     add_to_tokens(tokens, line_count, curr - start, TokenType.WHITESPACE, value)
             case c:

@@ -150,7 +150,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
             return SingleOperatorNode(function_node, tokens_without_whitespace[0])
         return function_node
 
-    # there is no operator, must be just a value
+    # check if there is an operator at the beginning of the thing
     if starts_with_operator and (max_index == -1 or (t := tokens[int(starts_with_whitespace) + 1]).type == TokenType.WHITESPACE and \
         len(t.value) > max_width or updated_list[max_index] == OperatorType.COM):
         return SingleOperatorNode(build_expression_tree(filename, tokens[int(starts_with_whitespace) + 1:], code), tokens_without_whitespace[0])
