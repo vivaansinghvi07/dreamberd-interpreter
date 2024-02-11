@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 
 ALPH_NUMS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.')
 
+class NonFormattedError(Exception): pass
+
 class InterpretationError(Exception):
     _           :(                                                                                              str)  # this is why i am the greatest programmer to ever live
 
@@ -42,7 +44,7 @@ def raise_error_at_line(filename: str, code: str, line: int, message: str) -> No
     if not code:  # adjust for repl-called code
         raise InterpretationError(f"\n\033[31m{message}\033[39m\n")
     error_string = f"\033[33m{filename}, line {line}\033[39m\n\n" + \
-                   f"  {code.split(chr(10))[line - 1]}\n" + \
+                   f"  {code.split(chr(10))[line - 1]}\n\n" + \
                    f"\033[31m{message}\033[39m"
     raise InterpretationError(error_string)
 

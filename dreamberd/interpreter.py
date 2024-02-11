@@ -30,7 +30,7 @@ try:
 except ImportError:
     GITHUB_IMPORTED = False
 
-from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
+from dreamberd.base import InterpretationError, NonFormattedError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
 from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdSpecialBlankValue, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
 from dreamberd.processor.lexer import tokenize as db_tokenize
 from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
@@ -73,23 +73,20 @@ def evaluate_normal_function(expr: FunctionNode, func: Union[DreamberdFunction, 
     # check to evaluate builtin
     if isinstance(func, BuiltinFunction):
         if func.arg_count > len(args):
-            raise_error_at_token(filename, code, f"Expected more arguments for function call with {func.arg_count} argument{'s' if func.arg_count == 1 else ''}.", expr.name)
-        try:
-            max_arg_count = func.arg_count if func.arg_count >= 0 else len(args)
-            return func.function(*args[:max_arg_count]) or DreamberdUndefined()
-        except InterpretationError as e:  # some intentionally raised error
-            raise_error_at_token(filename, code, str(e), expr.name)
+            raise_error_at_token(filename, code, f"Expected more arguments for function call with {func.arg_count} argument{'s' if func.arg_count != 1 else ''}.", expr.name)
+        max_arg_count = func.arg_count if func.arg_count >= 0 else len(args)
+        return func.function(*args[:max_arg_count]) or DreamberdUndefined()
     
     # check length is proper, adjust namespace, and run this code
     if len(func.args) > len(args):
-        raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.", expr.name)
+        raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) != 1 else ''}.", expr.name)
     new_namespace: Namespace = {name: Name(name, arg) for name, arg in zip(func.args, args)}
     return interpret_code_statements(func.code, namespaces + [new_namespace], [], when_statement_watchers + [{}]) or DreamberdUndefined()
 
 def register_async_function(expr: FunctionNode, func: DreamberdFunction, namespaces: list[Namespace], args: list[Value], async_statements: AsyncStatements) -> None:
     """ Adds a job to the async statements queue, which is accessed in the interpret_code_statements function. """
     if len(func.args) > len(args):
-        raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.", expr.name)
+        raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) != 1 else ''}.", expr.name)
     function_namespaces = namespaces + [{name: Name(name, arg) for name, arg in zip(func.args, args)}]
     async_statements.append((func.code, function_namespaces, 0, 1))
 
@@ -613,78 +610,75 @@ def perform_single_value_operation(val: Value, operator_token: Token) -> Value:
     raise_error_at_token(filename, code, "Something went wrong. My bad.", operator_token)
 
 def perform_two_value_operation(left: Value, right: Value, operator: OperatorType, operator_token: Token) -> Value:
-    try:
-        match operator:
-            case OperatorType.ADD:
-                if isinstance(left, DreamberdString) or isinstance(right, DreamberdString):
-                    return DreamberdString(db_to_string(left).value + db_to_string(right).value)
-                left_num = db_to_number(left)
-                right_num = db_to_number(right)
-                return DreamberdNumber(left_num.value + right_num.value)
-            case OperatorType.SUB | OperatorType.MUL | OperatorType.DIV | OperatorType.EXP:
-                left_num = db_to_number(left)
-                right_num = db_to_number(right)
-                if operator == OperatorType.DIV and abs(right_num.value) < FLOAT_TO_INT_PREC: # pretty much zero
-                    return DreamberdUndefined() 
-                elif operator == OperatorType.EXP and left_num.value < -FLOAT_TO_INT_PREC and not is_int(right_num.value):
-                    raise_error_at_line(filename, code, current_line, "Cannot raise a negative base to a non-integer exponent.")
-                match operator:
-                    case OperatorType.SUB: result = left_num.value - right_num.value
-                    case OperatorType.MUL: result = left_num.value * right_num.value
-                    case OperatorType.DIV: result = left_num.value / right_num.value
-                    case OperatorType.EXP: result = pow(left_num.value, right_num.value)
-                return DreamberdNumber(result)
-            case OperatorType.OR:
-                left_bool = db_to_boolean(left)
-                right_bool = db_to_boolean(right) 
-                match left_bool.value, right_bool.value:
-                    case True, _:     return left    # yes 
-                    case False, _:    return right   # depends
-                    case None, True:  return right   # yes
-                    case None, False: return left    # maybe?
-                    case None, None:  return left if random.random() < 0.50 else right   # maybe? 
-            case OperatorType.AND:  
-                left_bool = db_to_boolean(left)
-                right_bool = db_to_boolean(right) 
-                match left_bool.value, right_bool.value:
-                    case True, _:     return right   # depends
-                    case False, _:    return left    # nope
-                    case None, True:  return left    # maybe?
-                    case None, False: return right   # nope
-                    case None, None:  return left if random.random() < 0.50 else right  # maybe? 
-            case OperatorType.E: 
-                return is_approx_equal(left, right)
+    match operator:
+        case OperatorType.ADD:
+            if isinstance(left, DreamberdString) or isinstance(right, DreamberdString):
+                return DreamberdString(db_to_string(left).value + db_to_string(right).value)
+            left_num = db_to_number(left)
+            right_num = db_to_number(right)
+            return DreamberdNumber(left_num.value + right_num.value)
+        case OperatorType.SUB | OperatorType.MUL | OperatorType.DIV | OperatorType.EXP:
+            left_num = db_to_number(left)
+            right_num = db_to_number(right)
+            if operator == OperatorType.DIV and abs(right_num.value) < FLOAT_TO_INT_PREC: # pretty much zero
+                return DreamberdUndefined() 
+            elif operator == OperatorType.EXP and left_num.value < -FLOAT_TO_INT_PREC and not is_int(right_num.value):
+                raise_error_at_line(filename, code, current_line, "Cannot raise a negative base to a non-integer exponent.")
+            match operator:
+                case OperatorType.SUB: result = left_num.value - right_num.value
+                case OperatorType.MUL: result = left_num.value * right_num.value
+                case OperatorType.DIV: result = left_num.value / right_num.value
+                case OperatorType.EXP: result = pow(left_num.value, right_num.value)
+            return DreamberdNumber(result)
+        case OperatorType.OR:
+            left_bool = db_to_boolean(left)
+            right_bool = db_to_boolean(right) 
+            match left_bool.value, right_bool.value:
+                case True, _:     return left    # yes 
+                case False, _:    return right   # depends
+                case None, True:  return right   # yes
+                case None, False: return left    # maybe?
+                case None, None:  return left if random.random() < 0.50 else right   # maybe? 
+        case OperatorType.AND:  
+            left_bool = db_to_boolean(left)
+            right_bool = db_to_boolean(right) 
+            match left_bool.value, right_bool.value:
+                case True, _:     return right   # depends
+                case False, _:    return left    # nope
+                case None, True:  return left    # maybe?
+                case None, False: return right   # nope
+                case None, None:  return left if random.random() < 0.50 else right  # maybe? 
+        case OperatorType.E: 
+            return is_approx_equal(left, right)
 
-            # i'm gonna call this lasagna code because it's stacked like lasagna and looks stupid
-            case OperatorType.EE | OperatorType.NE:
-                if operator == OperatorType.EE:
-                    return is_equal(left, right)
-                return db_not(is_equal(left, right))
-            case OperatorType.EEE | OperatorType.NEE:
-                if operator == OperatorType.EEE:
-                    return is_really_equal(left, right)
-                return db_not(is_really_equal(left, right))
-            case OperatorType.EEEE | OperatorType.NEEE:
-                if operator == OperatorType.EEEE:
-                    return is_really_really_equal(left, right)
-                return db_not(is_really_really_equal(left, right))
-            case OperatorType.GT | OperatorType.LE:
-                is_eq = is_really_equal(left, right)
-                is_less = is_less_than(left, right)
-                is_le = False
-                match is_eq.value, is_less.value:  # performs the OR operation
-                    case (True, _) | (_, True): is_le = True
-                    case (None, _) | (_, None): is_le = None 
-                if operator == OperatorType.LE:
-                    return DreamberdBoolean(is_le)
-                return db_not(DreamberdBoolean(is_le))
-            case OperatorType.LT | OperatorType.GE:  
-                if operator == OperatorType.LT:
-                    return is_less_than(left, right)
-                return db_not(is_less_than(left, right))
+        # i'm gonna call this lasagna code because it's stacked like lasagna and looks stupid
+        case OperatorType.EE | OperatorType.NE:
+            if operator == OperatorType.EE:
+                return is_equal(left, right)
+            return db_not(is_equal(left, right))
+        case OperatorType.EEE | OperatorType.NEE:
+            if operator == OperatorType.EEE:
+                return is_really_equal(left, right)
+            return db_not(is_really_equal(left, right))
+        case OperatorType.EEEE | OperatorType.NEEE:
+            if operator == OperatorType.EEEE:
+                return is_really_really_equal(left, right)
+            return db_not(is_really_really_equal(left, right))
+        case OperatorType.GT | OperatorType.LE:
+            is_eq = is_really_equal(left, right)
+            is_less = is_less_than(left, right)
+            is_le = False
+            match is_eq.value, is_less.value:  # performs the OR operation
+                case (True, _) | (_, True): is_le = True
+                case (None, _) | (_, None): is_le = None 
+            if operator == OperatorType.LE:
+                return DreamberdBoolean(is_le)
+            return db_not(DreamberdBoolean(is_le))
+        case OperatorType.LT | OperatorType.GE:  
+            if operator == OperatorType.LT:
+                return is_less_than(left, right)
+            return db_not(is_less_than(left, right))
 
-    except InterpretationError as e:
-        raise_error_at_token(filename, code, str(e), operator_token)  # the operator token is the best that you are gonna get
     raise_error_at_token(filename, code, "Something went wrong here.", operator_token)
 
 def get_value_from_namespaces(name_or_value: Token, namespaces: list[Namespace]) -> Value:
@@ -812,6 +806,10 @@ def evaluate_expression_for_real(expr: Union[list[Token], ExpressionTreeNode], n
 
         case ExpressionNode():  # done :)
             left = evaluate_expression(expr.left, namespaces, async_statements, when_statement_watchers)
+            if db_to_boolean(left).value == True and expr.operator == OperatorType.OR:   # handle short curcuiting for True or __
+                return left
+            elif db_to_boolean(left).value == False and expr.operator == OperatorType.AND:   # handle short curcuiting for False and __
+                return left
             right = evaluate_expression(expr.right, namespaces, async_statements, when_statement_watchers)
             return perform_two_value_operation(left, right, expr.operator, expr.operator_token)
 
@@ -1349,7 +1347,7 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
                     if not isinstance(func := constructor.value, DreamberdFunction):
                         raise_error_at_line(filename, code, current_line, "Cannot create class variable with the same name as the class.")
                     if len(func.args) > len(args):
-                        raise_error_at_line(filename, code, current_line, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) == 1 else ''}.")
+                        raise_error_at_line(filename, code, current_line, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) != 1 else ''}.")
                     new_namespace: Namespace = {name: Name(name, arg) for name, arg in zip(func.args, args)}
                     interpret_code_statements(func.code, namespaces + [new_namespace], [], when_statement_watchers + [{}])
                     del class_namespace[class_name.value]  # remove the constructor
@@ -1474,3 +1472,8 @@ def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _dele
     deleted_values = _deleted_values
     current_line = 1
     
+def interpret_code_statements_error_wrapper(statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
+    try:
+        interpret_code_statements(statements, namespaces, async_statements, when_statement_watchers)
+    except NonFormattedError as e:
+        raise_error_at_line(filename, code, current_line, str(e))

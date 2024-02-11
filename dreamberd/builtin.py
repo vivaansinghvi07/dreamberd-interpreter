@@ -5,7 +5,7 @@ import math
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
-from dreamberd.base import InterpretationError
+from dreamberd.base import NonFormattedError
 
 from dreamberd.processor.syntax_tree import CodeStatement
 
@@ -28,9 +28,9 @@ def db_list_pop(self: DreamberdList, index: Union[DreamberdNumber, DreamberdSpec
         self.create_namespace()
         return retval
     elif not isinstance(index, DreamberdNumber) or not is_int(index.value):
-        raise InterpretationError("Expected integer for list popping.")
+        raise NonFormattedError("Expected integer for list popping.")
     elif not -1 <= index.value <= len(self.values) - 1:
-        raise InterpretationError("Indexing out of list bounds.")
+        raise NonFormattedError("Indexing out of list bounds.")
     retval = self.values.pop(round(index.value) + 1)
     self.create_namespace()
     return retval
@@ -46,9 +46,9 @@ def db_str_pop(self: DreamberdString, index: Union[DreamberdNumber, DreamberdSpe
         self.value = self.value[:-1]
         return DreamberdString(retval)
     elif not isinstance(index, DreamberdNumber) or not is_int(index.value):
-        raise InterpretationError("Expected integer for string popping.")
+        raise NonFormattedError("Expected integer for string popping.")
     elif not -1 <= index.value <= len(self.value) - 1:
-        raise InterpretationError("Indexing out of string bounds.")
+        raise NonFormattedError("Indexing out of string bounds.")
     index_val = round(index.value) + 1
     retval = self.value[index_val]
     self.value = self.value[:index_val] + self.value[index_val + 1:]
@@ -114,19 +114,19 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
 
     def access_index(self, index: Value) -> Value:
         if not isinstance(index, DreamberdNumber):
-            raise InterpretationError("Cannot index a list with a non-number value.")
+            raise NonFormattedError("Cannot index a list with a non-number value.")
         if not is_int(index.value):
-            raise InterpretationError("Expected integer for list indexing.")
+            raise NonFormattedError("Expected integer for list indexing.")
         elif not -1 <= index.value <= len(self.values) - 1:
-            raise InterpretationError("Indexing out of list bounds.")
+            raise NonFormattedError("Indexing out of list bounds.")
         return self.values[round(index.value) + 1]
 
     def assign_index(self, index: Value, val: Value) -> None:
         if not isinstance(index, DreamberdNumber):
-            raise InterpretationError("Cannot index a list with a non-number value.")
+            raise NonFormattedError("Cannot index a list with a non-number value.")
         if is_int(index.value):
             if not -1 <= index.value <= len(self.values) - 1:
-                raise InterpretationError("Indexing out of list bounds.")
+                raise NonFormattedError("Indexing out of list bounds.")
             self.values[round(index.value) + 1] = val
         else:  # assign in the middle of the array
             nearest_int_down = round(max((index.value + 1) // 1, 0))
@@ -143,25 +143,25 @@ class DreamberdNumber(DreamberdIndexable, DreamberdMutable):
     def access_index(self, index: Value) -> Value:
         self_val_str = self._get_self_str()
         if not isinstance(index, DreamberdNumber):
-            raise InterpretationError("Cannot index a number with a non-number value.")
+            raise NonFormattedError("Cannot index a number with a non-number value.")
         if not is_int(index.value):
-            raise InterpretationError("Expected integer for number indexing.")
+            raise NonFormattedError("Expected integer for number indexing.")
         elif not -1 <= index.value <= len(self_val_str) - 1:
-            raise InterpretationError("Indexing out of number bounds.")
+            raise NonFormattedError("Indexing out of number bounds.")
         return DreamberdNumber(int(self_val_str[round(index.value) + 1]))
 
     def assign_index(self, index: Value, val: Value) -> None:
         self_val_str = self._get_self_str()
         sign = self.value / abs(self.value)
         if not is_int(self.value):
-            raise InterpretationError("Cannot assign into a non-interger number.")
+            raise NonFormattedError("Cannot assign into a non-interger number.")
         if not isinstance(index, DreamberdNumber):
-            raise InterpretationError("Cannot index a number with a non-number value.")
+            raise NonFormattedError("Cannot index a number with a non-number value.")
         if not isinstance(val, DreamberdNumber) or not is_int(val.value) or not 0 <= val.value <= 9:
-            raise InterpretationError("Cannot assign into a number with a non-integer value.")
+            raise NonFormattedError("Cannot assign into a number with a non-integer value.")
         if is_int(index.value):
             if not -1 <= index.value <= len(self_val_str) - 1:
-                raise InterpretationError("Indexing out of number bounds.")
+                raise NonFormattedError("Indexing out of number bounds.")
             index_num = round(index.value) + 1
             self.value = sign * int(self_val_str[:index_num] + str(round(val.value)) + self_val_str[index_num + 1:])
         else:  # assign in the middle of the array
@@ -188,20 +188,20 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
 
     def access_index(self, index: Value) -> Value:
         if not isinstance(index, DreamberdNumber):
-            raise InterpretationError("Cannot index a string with a non-number value.")
+            raise NonFormattedError("Cannot index a string with a non-number value.")
         if not is_int(index.value):
-            raise InterpretationError("Expected integer for string indexing.")
+            raise NonFormattedError("Expected integer for string indexing.")
         elif not -1 <= index.value <= len(self.value) - 1:
-            raise InterpretationError("Indexing out of string bounds.")
+            raise NonFormattedError("Indexing out of string bounds.")
         return DreamberdString(self.value[round(index.value) + 1])
 
     def assign_index(self, index: Value, val: Value) -> None:
         if not isinstance(index, DreamberdNumber):
-            raise InterpretationError("Cannot index a string with a non-number value.")
+            raise NonFormattedError("Cannot index a string with a non-number value.")
         val_str = db_to_string(val).value
         if is_int(index.value):
             if not -1 <= index.value <= len(self.value) - 1:
-                raise InterpretationError("Indexing out of string bounds.")
+                raise NonFormattedError("Indexing out of string bounds.")
             index_num = round(index.value) + 1
             self.value = self.value[:index_num] + val_str + self.value[index_num + 1:]
         else:  # assign in the middle of the array
@@ -231,12 +231,12 @@ class DreamberdMap(DreamberdIndexable, Value):
 
     def access_index(self, index: Value) -> Value:
         if not isinstance(index, (DreamberdString, DreamberdNumber)):
-            raise InterpretationError("Keys of a map must be an index or a number.")
+            raise NonFormattedError("Keys of a map must be an index or a number.")
         return self.self_dict[index.value]
 
     def assign_index(self, index: Value, val: Value) -> None:
         if not isinstance(index, (DreamberdString, DreamberdNumber)):
-            raise InterpretationError("Keys of a map must be an index or a number.")
+            raise NonFormattedError("Keys of a map must be an index or a number.")
         self.self_dict[index.value] = val
 
 @dataclass 
@@ -270,13 +270,13 @@ class Variable:
     def can_be_reset(self) -> bool:
         if self.lifetimes:
             return self.lifetimes[0].can_be_reset
-        raise InterpretationError("Variable is undefined.")
+        raise NonFormattedError("Variable is undefined.")
 
     @property 
     def can_edit_value(self) -> bool:
         if self.lifetimes:
             return self.lifetimes[0].can_edit_value
-        raise InterpretationError("Variable is undefined.")
+        raise NonFormattedError("Variable is undefined.")
 
     def add_lifetime(self, value: Value, confidence: int, duration: int, can_be_reset: bool, can_edit_value: bool) -> None:
         for i in range(len(self.lifetimes) + 1):
@@ -298,7 +298,7 @@ class Variable:
     def value(self) -> Value:
         if self.lifetimes:
             return self.lifetimes[0].value
-        raise InterpretationError("Variable is undefined.")
+        raise NonFormattedError("Variable is undefined.")
     
 def all_function_keywords() -> list[str]:
 
@@ -387,14 +387,14 @@ def db_to_number(val: Value) -> DreamberdNumber:
             return_number = int(val.value is not None and val.value) + (val.value is None) * 0.5
         case DreamberdList():
             if val.values:
-                raise InterpretationError("Cannot turn a non-empty list into a number.")
+                raise NonFormattedError("Cannot turn a non-empty list into a number.")
             return_number = 0 
         case DreamberdMap():
             if val.self_dict:
-                raise InterpretationError("Cannot turn a non-empty map into a number.")
+                raise NonFormattedError("Cannot turn a non-empty map into a number.")
             return_number = 0 
         case _:
-            raise InterpretationError(f"Cannot turn type {type(val).__name__} into a number.")
+            raise NonFormattedError(f"Cannot turn type {type(val).__name__} into a number.")
     return DreamberdNumber(return_number)
 
 def db_signal(starting_value: Value) -> Value:
@@ -414,7 +414,7 @@ def __math_function_decorator(func: Callable):
     def inner(*args) -> DreamberdNumber:  # no kwargs
         for arg in args:
             if not isinstance(arg, DreamberdNumber):
-                raise InterpretationError("Cannot pass in a non-number value into a math function.")
+                raise NonFormattedError("Cannot pass in a non-number value into a math function.")
         return DreamberdNumber(func(*[arg.value for arg in args]))
     return inner
 
@@ -422,7 +422,7 @@ def __number_function_maker(num: int) -> BuiltinFunction:
     def the_func(n: DreamberdNumber) -> DreamberdNumber:
         nonlocal num
         if not isinstance(n, DreamberdNumber):
-            raise InterpretationError(f"Expected a number in the ones digit. Instead received a {type(n).__name__}")
+            raise NonFormattedError(f"Expected a number in the ones digit. Instead received a {type(n).__name__}")
         return DreamberdNumber(num + n.value)
     return BuiltinFunction(1, the_func)
 

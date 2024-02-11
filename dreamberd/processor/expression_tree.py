@@ -2,7 +2,7 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import Optional
 
-from dreamberd.base import STR_TO_OPERATOR, Token, TokenType, OperatorType, InterpretationError, raise_error_at_token
+from dreamberd.base import STR_TO_OPERATOR, NonFormattedError, Token, TokenType, OperatorType, InterpretationError, raise_error_at_token
 
 class ExpressionTreeNode(metaclass=ABCMeta):
     @abstractmethod
@@ -86,7 +86,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
     """
 
     if not tokens:
-        raise InterpretationError("\033[31mSomething went wrong, I don't know what so figure it out :)\033[32m")
+        raise NonFormattedError("Something went wrong, I don't know what so figure it out :)")
 
     # tabs at the beginning or end do not matter
     for token in tokens[1:-1]:
@@ -162,9 +162,9 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
         try:
             name_or_value = tokens_without_whitespace[0]
             if name_or_value.type not in [TokenType.NAME, TokenType.L_SQUARE, TokenType.STRING]:
-                raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0]); raise 
+                raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0])
         except IndexError:
-            raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0]); raise
+            raise_error_at_token(filename, code, "Expected name or value.", tokens_without_whitespace[0])
 
         # this is a list :)
         if name_or_value.type == TokenType.L_SQUARE:
@@ -264,7 +264,7 @@ def build_expression_tree(filename: str, tokens: list[Token], code: str) -> Expr
     else: 
         operator = updated_list[max_index]
         if not isinstance(operator, OperatorType): 
-            raise_error_at_token(filename, code, "Something went wrong. My bad.", tokens[max_index]); raise
+            raise_error_at_token(filename, code, "Something went wrong. My bad.", tokens[max_index])
         return ExpressionNode(
             build_expression_tree(filename, tokens[:max_index], code), 
             build_expression_tree(filename, tokens[max_index + 1:], code), 
