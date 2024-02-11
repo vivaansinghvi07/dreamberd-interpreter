@@ -16,7 +16,7 @@ from pathlib import Path
 from copy import deepcopy
 from threading import Thread
 from difflib import SequenceMatcher
-from typing import Literal, Optional, TypeAlias, Union, assert_never
+from typing import Literal, Optional, TypeAlias, Union
 
 KEY_MOUSE_IMPORTED = True
 try: 
@@ -1343,7 +1343,9 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
                 if instance_made:
                     raise_error_at_line(filename, code, current_line, f"Already made instance of the class \"{class_name}\".")
                 instance_made = True 
+                obj = DreamberdObject(class_name.value, class_namespace)
                 if constructor := class_namespace.get(class_name.value):
+                    args = [obj] + list(args)  # type: ignore
                     if not isinstance(func := constructor.value, DreamberdFunction):
                         raise_error_at_line(filename, code, current_line, "Cannot create class variable with the same name as the class.")
                     if len(func.args) > len(args):
@@ -1351,7 +1353,7 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
                     new_namespace: Namespace = {name: Name(name, arg) for name, arg in zip(func.args, args)}
                     interpret_code_statements(func.code, namespaces + [new_namespace], [], when_statement_watchers + [{}])
                     del class_namespace[class_name.value]  # remove the constructor
-                return DreamberdObject(class_name.value, class_namespace)
+                return obj
 
             namespaces[-1][statement.name.value] = Name(statement.name.value, BuiltinFunction(-1, class_object_closure))
 
@@ -1374,7 +1376,7 @@ def fill_class_namespace(statements: list[tuple[CodeStatement, ...]], namespaces
 
                 # why the fuck are my function calls so long i really need some globals  
                 var_expr = evaluate_expression(statement.expression, namespaces, async_statements, [{}]) 
-                declare_new_variable(statement, var_expr, [class_namespace], async_statements, [{}])  # don't want anything happening here, it's a different name
+                declare_new_variable(statement, var_expr, namespaces + [class_namespace], async_statements, [{}])  # don't want anything happening here, it's a different name
             case _:
                 raise_error_at_line(filename, code, current_line, f"Unexpected statement of type {type(statement).__name__} in class declaration.")
 

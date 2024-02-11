@@ -221,12 +221,12 @@ class DreamberdSpecialBlankValue(Value):
     pass
 
 @dataclass 
-class DreamberdObject(DreamberdNamespaceable):
+class DreamberdObject(DreamberdNamespaceable, Value):
     class_name: str
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
 @dataclass 
-class DreamberdMap(DreamberdIndexable):
+class DreamberdMap(DreamberdIndexable, Value):
     self_dict: dict[Union[int, float, str], Value]
 
     def access_index(self, index: Value) -> Value:
@@ -411,11 +411,11 @@ def db_exit() -> None:
 
 def __math_function_decorator(func: Callable):
     @functools.wraps(func)
-    def inner(*args):  # no kwargs
+    def inner(*args) -> DreamberdNumber:  # no kwargs
         for arg in args:
             if not isinstance(arg, DreamberdNumber):
                 raise InterpretationError("Cannot pass in a non-number value into a math function.")
-        return func(*[arg.value for arg in args])
+        return DreamberdNumber(func(*[arg.value for arg in args]))
     return inner
 
 def __number_function_maker(num: int) -> BuiltinFunction:
