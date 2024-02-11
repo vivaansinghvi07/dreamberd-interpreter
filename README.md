@@ -32,12 +32,11 @@ options:
 
 ## TODO 
 
-- Add another expression type which is just the dot operator
+- Add another expression type which is just the dot operator, used for indexing and accessing names
 - Add different files exporting and importing things across ?
 - Allow escape characters in strings (currently you can't do \n)
 - Better debugging (pretty limited for the time being)
 - A much better standard library
-- Fix short curcuiting
 
 ## Absent Features
 
