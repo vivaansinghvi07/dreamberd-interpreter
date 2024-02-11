@@ -432,7 +432,7 @@ MATH_FUNCTION_KEYWORDS = {
                                          else len([arg for arg in v.__text_signature__[1:-1].split(', ') if arg.isalpha()])) 
         if v.__text_signature__ else 1 if name == 'log' else -1, __math_function_decorator(v)) 
     if isinstance(v := getattr(math, name), type(math.ulp)) else DreamberdNumber(v)) for name in dir(math) if not name.startswith('__')
-}  # the fuck is this
+}  # the frick is this
 BUILTIN_FUNCTION_KEYWORDS = {
     "new": Name("new", BuiltinFunction(1, db_identity)),
     "current": Name("current", BuiltinFunction(1, db_identity)),

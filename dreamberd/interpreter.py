@@ -689,7 +689,7 @@ def perform_two_value_operation(left: Value, right: Value, operator: OperatorTyp
 
 def get_value_from_namespaces(name_or_value: Token, namespaces: list[Namespace]) -> Value:
 
-    # what the fuck am i doing rn
+    # what the frick am i doing rn
     if v := get_name_from_namespaces(name_or_value.value, namespaces):
         if isinstance(v.value, DreamberdPromise):
             return deepcopy(get_value_from_promise(v.value))  # consider not deepcopying this but it doesnt really matter
@@ -1374,7 +1374,7 @@ def fill_class_namespace(statements: list[tuple[CodeStatement, ...]], namespaces
                 ))
             case VariableDeclaration(): 
 
-                # why the fuck are my function calls so long i really need some globals  
+                # why the frick are my function calls so long i really need some globals  
                 var_expr = evaluate_expression(statement.expression, namespaces, async_statements, [{}]) 
                 declare_new_variable(statement, var_expr, namespaces + [class_namespace], async_statements, [{}])  # don't want anything happening here, it's a different name
             case _:

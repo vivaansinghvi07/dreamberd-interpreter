@@ -44,9 +44,9 @@ fn fillMatrix(m, y, x, x_min, y_min, x_max, y_max) => {
    }
 }
 
-const const fuck = f!
+const const frick = f!
 
-fuck performIter(m, ref) => {
+frick performIter(m, ref) => {
    var const y_counter = 0!
    when (y_counter < m.length) {
       var const x_counter = 0!
