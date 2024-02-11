@@ -34,10 +34,8 @@ options:
 
 - Add different files exporting and importing things across ?
 - Allow escape characters in strings (currently you can't do \n)
-- Allow for empty strings (currently parsed as a string with >1 quotes)
 - Better debugging (pretty limited for the time being)
 - A much better standard library
-- Somehow, type hints cause lifetimes to be ignored. Why????
 
 ## Absent Features
 
@@ -251,7 +249,7 @@ function isKeyDown(key) => {
 
 **Technical info:** Booleans are stored as one-and-a-half bits.
 
-## Arithmetic
+### Arithmetic
 
 DreamBerd has significant whitespace. Use spacing to specify the order of arithmetic operations.
 
@@ -327,7 +325,7 @@ If you want to be much less precise, you can use `=`.
 3 = 3.14! //true
 ```
 
-## Functions
+### Functions
 
 To declare a function, you can use any letters from the word `function` (as long as they're in order):
 
@@ -375,6 +373,14 @@ Even zero.
 ```javascript
 const const name = Luke!
 ```
+
+#### Technical Info
+
+- To parse strings with many quotes, the interpreter scans the code for the shortest possible string.
+- As soon as a pair of quote groups is found that is equal in terms of quote count on both sides, that is considered a string.
+    - For example, `""""""` reads the two first double quotes, detects that there is a pair (`"` and `"`), and returns the corresponding empty string. This is repeated twice for the two remaining pairs of double quotes.
+    - Therefore, to avoid premature detections of strings, simply create your starting quote with a single `'` and any number of `"`, like so: `'"""Hello world!'''''''`
+- This is as complicated as it is in order to allow the declaration of empty strings without many problems.
 
 ### String Interpolation
 

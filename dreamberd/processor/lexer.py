@@ -16,6 +16,54 @@ def get_effective_whitespace_value(char: str) -> str:
             return char 
     return ""
     
+def get_quote_count(quote_value: str) -> int:
+    return sum(2 if c == '"' else 1 for c in quote_value)
+
+def is_matching_pair(quote_value: str) -> bool:
+    """ 
+    Finds a pair of quote groups that have the same count of quotes. 
+    Returns an integer index where the second group begins if found, else -1.
+    """
+    total_sum = get_quote_count(quote_value)
+    if total_sum % 2: return False
+    for i in range(len(quote_value)):
+        if get_quote_count(quote_value[:i]) == total_sum // 2:
+            return True
+    return False
+
+def get_string_token(code: str, curr: int, filename: str, error_line: int) -> tuple[int, str]:
+
+    """ 
+    Scans the code for the shortest possible string and returns it. 
+    Returns as soon as a pair of quote groups is found that is equal in terms of quote count on both sides.
+    For example, """""" reads the two first double quotes, detects that there is a pair (" and "), and returns the corresponding empty string.
+    To have more sequences of quotes, one can do the following:
+        '""hello world"'"  <-- this is interpreted as the string "hello world"
+    Therefore, to avoid premature returns of quotes, simply preface your quotes with a single ' and the rest "
+    This guarantees that no pair of quotes will be found in the starting quote because it will have an odd number of quotes.
+    """
+
+    quote_value = ""
+    while code[curr] in """"'""":  # lmaoo
+        quote_value += code[curr] 
+        if is_matching_pair(quote_value):
+            return curr, ""
+        curr += 1
+    quote_count = get_quote_count(quote_value)
+
+    value = ""
+    while curr < len(code):
+        running_count, quote_start = 0, curr
+        while code[curr] in """"'""":
+            running_count += 2 if code[curr] == '"' else 1
+            if running_count == quote_count:
+                return curr, value
+            curr += 1
+        value += code[quote_start:curr + 1]
+        curr += 1
+    else:
+        raise_error_at_line(filename, code, error_line, "Invalid string. Starting quotes do not match opening quotes.")
+
 def tokenize(filename: str, code: str) -> list[Token]:
     code += '   '  # adding a space here so i dont have to write 10 damn checks for out of bounds
     line_count = 1
@@ -96,25 +144,8 @@ def tokenize(filename: str, code: str) -> list[Token]:
                         value += '='
                         curr += 1
                     add_to_tokens(tokens, line_count, curr - start, TokenType.EQUAL, value)
-            case '"' | "'":  # TODO: fix lol
-                quote_count = 0
-                while code[curr] in "'\"":
-                    quote_count += 1 if code[curr] == "'" else 2
-                    curr += 1
-                value = ''
-                while code[curr] not in "'\"\n":   # changing this here because \n not allowed in strings
-                    value += code[curr]
-                    if code[curr] == "\\":
-                        curr += 1
-                        value += code[curr]
-                    curr += 1
-                while code[curr] in "'\"":
-                    quote_count -= 1 if code[curr] == "'" else 2
-                    curr += 1
-                if code[curr] not in '!\n':  # autocomplete of strings.......................
-                    if quote_count != 0:
-                        raise_error_at_line(filename, code, line_count, "Invalid string. Starting quotes do not match opening quotes.")
-                curr -= 1
+            case '"' | "'":  
+                curr, value = get_string_token(code, curr, filename, line_count)
                 add_to_tokens(tokens, line_count, curr - start, TokenType.STRING, value)
             case ' ' | '\t' | '(' | ')': 
                 if code[curr] == '(' and curr + 1 < len(code) and code[curr + 1] == ')':

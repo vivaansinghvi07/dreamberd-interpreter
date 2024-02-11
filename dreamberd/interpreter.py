@@ -31,7 +31,7 @@ except ImportError:
     GITHUB_IMPORTED = False
 
 from dreamberd.base import InterpretationError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
-from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
+from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdSpecialBlankValue, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
 from dreamberd.processor.lexer import tokenize as db_tokenize
 from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
 from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExpressionStatement, FunctionDefinition, ReturnStatement, ReverseStatement, VariableAssignment, VariableDeclaration, WhenStatement
@@ -774,6 +774,8 @@ def evaluate_expression_for_real(expr: Union[list[Token], ExpressionTreeNode], n
                 expr = deepcopy(expr)   # we create a copy of the expression as to not modify it badly
                 expr.args.insert(0, ValueNode(Token(TokenType.NAME, caller, expr.name.line, expr.name.col)))  # artificially put this here, as this is the imaginary "this" 
             args = [evaluate_expression(arg, namespaces, async_statements, when_statement_watchers) for arg in expr.args]
+            if isinstance(args[0], DreamberdSpecialBlankValue):
+                args = args[1:]
             if isinstance(func.value, DreamberdFunction) and func.value.is_async and not force_execute_sync:
                 register_async_function(expr, func.value, namespaces, args, async_statements)
                 return DreamberdUndefined()

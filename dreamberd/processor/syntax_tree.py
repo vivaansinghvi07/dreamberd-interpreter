@@ -444,7 +444,7 @@ def generate_syntax_tree(filename: str, tokens: list[Token], code: str) -> list[
                     filename, tokens, without_whitespace, code
                 ))
 
-            else:  # options here are plain expression, variable assignment, return, or simple one-liner funciton expression
+            else:  
                 final_statements.append(create_unscoped_code_statement(
                     filename, tokens, without_whitespace, code
                 ))
