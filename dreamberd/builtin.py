@@ -312,8 +312,8 @@ def all_function_keywords() -> list[str]:
                     for t in range(2):
                         for i in range(2):
                             for o in range(2):
-                                for n2 in range(2):
-                                    keywords.add("".join([c * i for c, i in zip('function', [f, u, n, c, t, i, o, n2])]) or 'fn')
+                                for n_ in range(2):
+                                    keywords.add("".join([c * i for c, i in zip('function', [f,u,n,c,t,i,o,n_])]) or 'fn')    # the `or` allows the empty string to not count
     return list(keywords)
 
 FUNCTION_KEYWORDS = all_function_keywords()

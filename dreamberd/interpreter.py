@@ -16,7 +16,7 @@ from pathlib import Path
 from copy import deepcopy
 from threading import Thread
 from difflib import SequenceMatcher
-from typing import Literal, Optional, TypeAlias, Union
+from typing import Literal, Optional, TypeAlias, Union 
 
 KEY_MOUSE_IMPORTED = True
 try: 
@@ -397,6 +397,9 @@ def get_name_and_namespace_from_namespaces(name: str, namespaces: list[Namespace
         return base_val, ns
     return None, namespaces[-1]
 
+def evaluate_escape_sequences(val: DreamberdString) -> DreamberdString:  # this needs only be called once per completed string
+    return DreamberdString(eval(f'"{val.value.replace(f"{chr(34)}", f"{chr(92)}{chr(34)}")}"'))  # cursed string parsing
+
 def interpret_formatted_string(val: Token, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> DreamberdString:
     val_string = val.value
     locale.setlocale(locale.LC_ALL, locale.getlocale()[0])
@@ -406,8 +409,8 @@ def interpret_formatted_string(val: Token, namespaces: list[Namespace], async_st
     try:
         evaluated_values: list[tuple[str, tuple[int, int]]] = []  # [(str, (start, end))...]
         for group_start_index in [i for i in range(len(indeces)) if indeces[i]]:
-            if val_string[group_start_index + 1] == '{':
-                end_index = group_start_index + 1
+            if val_string[group_start_index + len(symbol)] == '{':
+                end_index = group_start_index + len(symbol)
                 bracket_layers = 1
                 while bracket_layers:  # if this errs, it will be caught and detected as invalid formatting
                     end_index += 1
@@ -417,9 +420,9 @@ def interpret_formatted_string(val: Token, namespaces: list[Namespace], async_st
                         bracket_layers -= 1
                 
                 # end_index is now the index containing the bracket.
-                internal_tokens = db_tokenize(f"{filename}__interpolated_string", val_string[group_start_index + 2 : end_index ])
+                internal_tokens = db_tokenize(f"{filename}__interpolated_string", val_string[group_start_index + len(symbol) + 1 : end_index ])
                 internal_expr = build_expression_tree(filename, internal_tokens, code)
-                internal_value = evaluate_expression(internal_expr, namespaces, async_statements, when_statement_watchers)
+                internal_value = evaluate_expression(internal_expr, namespaces, async_statements, when_statement_watchers, ignore_string_escape_sequences=True)
                 evaluated_values.append((db_to_string(internal_value).value, (group_start_index, end_index + 1)))
 
         new_string = list(val_string)
@@ -572,7 +575,7 @@ def is_really_really_equal(left: Value, right: Value) -> DreamberdBoolean:
 
 def is_less_than(left: Value, right: Value) -> DreamberdBoolean:
     if type(left) != type(right):
-        raise_error_at_line(filename, code, current_line, 'Cannot compare two values of different types.')
+        raise_error_at_line(filename, code, current_line, f"Cannot compare value of type {type(left).__name__} with one of type {type(right).__name__}.")
     match left, right:
         case (DreamberdNumber(), DreamberdNumber()) | \
              (DreamberdString(), DreamberdString()) | \
@@ -710,14 +713,14 @@ def print_expression_debug(debug: int, expr: Union[list[Token], ExpressionTreeNo
     else: debug_print_no_token(filename, msg)
 
 
-def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> Value:
+def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers, *, ignore_string_escape_sequences: bool = False) -> Value:
     """ Wrapper for the evaluate_expression_for_real function that checks deleted values on each run. """
-    retval = evaluate_expression_for_real(expr, namespaces, async_statements, when_statement_watchers)
+    retval = evaluate_expression_for_real(expr, namespaces, async_statements, when_statement_watchers, ignore_string_escape_sequences)
     if isinstance(retval, (DreamberdNumber, DreamberdString)) and retval in deleted_values:
         raise_error_at_line(filename, code, current_line, f"The value {retval.value} has been deleted.")
     return retval
 
-def evaluate_expression_for_real(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> Value:
+def evaluate_expression_for_real(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers, ignore_string_escape_sequences: bool) -> Value:
 
     expr = get_built_expression(expr)
     match expr:
@@ -794,7 +797,10 @@ def evaluate_expression_for_real(expr: Union[list[Token], ExpressionTreeNode], n
 
         case ValueNode():  # done :)
             if expr.name_or_value.type == TokenType.STRING: 
-                return interpret_formatted_string(expr.name_or_value, namespaces, async_statements, when_statement_watchers)
+                retval = interpret_formatted_string(expr.name_or_value, namespaces, async_statements, when_statement_watchers)
+                if not ignore_string_escape_sequences:
+                    return evaluate_escape_sequences(retval)
+                return retval
             return get_value_from_namespaces(expr.name_or_value, namespaces)
 
         case IndexNode():  # done :)
