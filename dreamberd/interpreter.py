@@ -30,11 +30,11 @@ try:
 except ImportError:
     GITHUB_IMPORTED = False
 
-from dreamberd.base import InterpretationError, NonFormattedError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
+from dreamberd.base import NonFormattedError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
 from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdSpecialBlankValue, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
 from dreamberd.processor.lexer import tokenize as db_tokenize
 from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
-from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExpressionStatement, FunctionDefinition, ReturnStatement, ReverseStatement, VariableAssignment, VariableDeclaration, WhenStatement
+from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExportStatement, ExpressionStatement, FunctionDefinition, ImportStatement, ReturnStatement, ReverseStatement, VariableAssignment, VariableDeclaration, WhenStatement
 
 # several "ratios" used in the approx equal function
 NUM_EQUALITY_RATIO = 0.1  # a-b / b 
@@ -968,7 +968,8 @@ def determine_statement_type(possible_statements: tuple[CodeStatement, ...], nam
         AfterStatement: {'after'},
         ClassDeclaration: {'class', 'className'},
         DeleteStatement: {'delete'},
-        ReverseStatement: {'reverse'}
+        ReverseStatement: {'reverse'},
+        ImportStatement: {'import'}
     }
 
     for st in possible_statements:
@@ -1004,6 +1005,10 @@ def determine_statement_type(possible_statements: tuple[CodeStatement, ...], nam
                     isinstance(val.value, DreamberdKeyword) and val.value.value == 'const' 
                     for mod in st.modifiers]):
                     return st
+        elif isinstance(st, ExportStatement):
+            if isinstance(v := get_value_from_namespaces(st.to_keyword, namespaces), DreamberdKeyword) and v.value == 'to' and \
+               isinstance(v := get_value_from_namespaces(st.export_keyword, namespaces), DreamberdKeyword) and v.value == 'export':
+                return st
 
     # now is left: expression evalulation and variable assignment
     for st in possible_statements:
@@ -1333,6 +1338,18 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
                 statement.expression, namespaces, async_statements, when_statement_watchers
             ), namespaces, async_statements, when_statement_watchers)
 
+        case ImportStatement():
+            for name in statement.names:
+                if not (v := importable_names.get(name.value)):
+                    raise_error_at_token(filename, code, f"Name {name.value} could not be imported.", name)
+                namespaces[-1][name.value] = Name(name.value, v)
+
+        case ExportStatement():
+            for name in statement.names:
+                if not (v := get_name_from_namespaces(name.value, namespaces)):
+                    raise_error_at_token(filename, code, "Tried to export name that is not a name or variable.", name)
+                exported_names.append((statement.target_file.value, name.value, v.value))
+
         case ClassDeclaration(): 
 
             class_namespace: Namespace = {}
@@ -1470,15 +1487,17 @@ def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], names
     
 # btw, reason async_statements and when_statements cannot be global is because they change depending on scope,
 # due to (possibly bad) design decisions, the name_watchers does not do this... :D
-def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _deleted_values: set[Value]):
-    global filename, code, name_watchers, deleted_values, current_line  # screw bad practice, not like anyone's using this anyways
+def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _deleted_values: set[Value], _exported_names: list[tuple[str, str, Value]], _importable_names: dict[str, Value]):
+    global filename, code, name_watchers, deleted_values, current_line, exported_names, importable_names  # screw bad practice, not like anyone's using this anyways
     filename = _filename 
     code = _code
     name_watchers = _name_watchers 
     deleted_values = _deleted_values
+    exported_names = _exported_names
+    importable_names = _importable_names
     current_line = 1
     
-def interpret_code_statements_error_wrapper(statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
+def interpret_code_statements_main_wrapper(statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
     try:
         interpret_code_statements(statements, namespaces, async_statements, when_statement_watchers)
     except NonFormattedError as e:

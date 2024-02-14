@@ -1,13 +1,14 @@
+import re 
 import sys
 from argparse import ArgumentParser
 from time import sleep
-from typing import Union
+from typing import Optional, Union
 from dreamberd.base import InterpretationError, NonFormattedError, Token, TokenType
 
-from dreamberd.builtin import KEYWORDS, Name, Variable
+from dreamberd.builtin import KEYWORDS, Name, Value, Variable
 from dreamberd.processor.lexer import tokenize
-from dreamberd.processor.syntax_tree import CodeStatement, generate_syntax_tree
-from dreamberd.interpreter import interpret_code_statements, interpret_code_statements_error_wrapper, load_global_dreamberd_variables, load_globals, load_public_global_variables
+from dreamberd.processor.syntax_tree import generate_syntax_tree
+from dreamberd.interpreter import interpret_code_statements, interpret_code_statements_main_wrapper, load_global_dreamberd_variables, load_globals, load_public_global_variables
 
 __all__ = ['run_repl', 'run_file']
 
@@ -44,7 +45,7 @@ def __get_next_repl_input(closed_scope_layers: int = 0) -> tuple[str, list[Token
 
 def run_repl() -> None:
     namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]  # type: ignore
-    load_globals(__REPL_FILENAME, "", {}, set())
+    load_globals(__REPL_FILENAME, "", {}, set(), [])
     load_global_dreamberd_variables(namespaces)
     async_statements = []
     when_statement_watchers = [{}]
@@ -55,19 +56,47 @@ def run_repl() -> None:
             interpret_code_statements(statements, namespaces, async_statements, when_statement_watchers)
         except InterpretationError as e:
             print(e)
+        except NonFormattedError as e:
+            print("\033[31m\n", e, "\n\033[39m", sep="")
             
-def run_file(filename: str) -> None:  # idk what else to call this
+def run_file(main_filename: str) -> None:  # idk what else to call this
 
-    with open(filename, 'r') as f:
-        code = f.read()
-    tokens = tokenize(filename, code)
-    statements = generate_syntax_tree(filename, tokens, code)
+    with open(main_filename, 'r') as f:
+        code_lines = f.readlines()
 
-    namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]   # type: ignore
-    load_globals(filename, code, {}, set())
-    load_global_dreamberd_variables(namespaces)
-    load_public_global_variables(namespaces)
-    interpret_code_statements_error_wrapper(statements, namespaces, [], [{}])
+    # split up into seperate 'files' by finding which lines start with multiple equal signs
+    files: list[tuple[Optional[str], str]] = []
+    if any(matches := [re.match(r"=====.*", l) for l in code_lines]):
+        for i, match in reversed([*enumerate(matches)]):
+            if match is None: continue 
+            name = match.group().strip('=').strip() or None
+            files.insert(0, (name, ''.join(code_lines[i+1:])))
+            del code_lines[i:]
+        files.insert(0, (None, ''.join(code_lines[0:])))
+    else:
+        files = [(None, ''.join(code_lines))]
+    
+    # execute code for each file
+    importable_names: dict[str, dict[str, Value]] = {} 
+    for filename, code in files:
+        filename = filename or "__unnamed_file__"
+        tokens = tokenize(filename, code)
+        statements = generate_syntax_tree(filename, tokens, code)
+
+        # load variables and run the code
+        namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]   # type: ignore
+        exported_names: list[tuple[str, str, Value]] = []
+        load_globals(filename, code, {}, set(), exported_names, importable_names.get(filename, {}))
+        load_global_dreamberd_variables(namespaces)
+        load_public_global_variables(namespaces)
+        interpret_code_statements_main_wrapper(statements, namespaces, [], [{}])
+
+        # take exported names and put them where they belong
+        for target_filename, name, value in exported_names:
+            if target_filename not in importable_names:
+                importable_names[target_filename] = {}
+            importable_names[target_filename][name] = value
+
     print("\033[33mCode has finished executing. Press ^C once or twice to stop waiting for when-statements and after-statements.\033[039m")
     try:
         while True:
