@@ -45,7 +45,7 @@ def __get_next_repl_input(closed_scope_layers: int = 0) -> tuple[str, list[Token
 
 def run_repl() -> None:
     namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]  # type: ignore
-    load_globals(__REPL_FILENAME, "", {}, set(), [])
+    load_globals(__REPL_FILENAME, "", {}, set(), [], {})
     load_global_dreamberd_variables(namespaces)
     async_statements = []
     when_statement_watchers = [{}]
