@@ -11,6 +11,9 @@ class CodeStatement():
 class CodeStatementKeywordable(metaclass=ABCMeta):  # this is completely unnecessary lmao
     keyword: Token
 
+class CodeStatementDebuggable(metaclass=ABCMeta):   # this is even more unnecessary
+    debug: int
+
 # name name argname, argname, argname => {  ...
 # for single line arrows, this is:
 # name name argname, => expression !?
@@ -32,7 +35,7 @@ class ClassDeclaration(CodeStatement, CodeStatementKeywordable):
 # : ... can be ignored
 # name name name: ... = something!?
 @dataclass
-class VariableDeclaration(CodeStatement):
+class VariableDeclaration(CodeStatement, CodeStatementDebuggable):
     name: Token
     modifiers: list[Token]
     lifetime: Optional[str]
@@ -42,7 +45,7 @@ class VariableDeclaration(CodeStatement):
 
 # name []? = ...!
 @dataclass 
-class VariableAssignment(CodeStatement):
+class VariableAssignment(CodeStatement, CodeStatementDebuggable):
     name: Token
     expression: Union[list[Token], ExpressionTreeNode]
     debug: int
@@ -61,27 +64,27 @@ class Conditional(CodeStatement, CodeStatementKeywordable):
 
 # name expression !?
 @dataclass
-class ReturnStatement(CodeStatement):
+class ReturnStatement(CodeStatement, CodeStatementDebuggable):
     keyword: Optional[Token]
     expression: Union[list[Token], ExpressionTreeNode]
     debug: int
 
 # name name !?
 @dataclass
-class DeleteStatement(CodeStatement, CodeStatementKeywordable):
+class DeleteStatement(CodeStatement, CodeStatementKeywordable, CodeStatementDebuggable):
     keyword: Token
     name: Token
     debug: int
 
 # name!
 @dataclass
-class ReverseStatement(CodeStatement, CodeStatementKeywordable):
+class ReverseStatement(CodeStatement, CodeStatementKeywordable, CodeStatementDebuggable):
     keyword: Token
     debug: int
 
 # expression !?   < virtually indistinguishable from a return statement from a parsing perspective
 @dataclass
-class ExpressionStatement(CodeStatement):
+class ExpressionStatement(CodeStatement, CodeStatementDebuggable):
     expression: Union[list[Token], ExpressionTreeNode]
     debug: int
 
@@ -98,6 +101,22 @@ class AfterStatement(CodeStatement, CodeStatementKeywordable):
     keyword: Token
     expression: Union[list[Token], ExpressionTreeNode]
     code: list[tuple[CodeStatement, ...]]
+
+# name name (, name)* name string!
+@dataclass 
+class ExportStatement(CodeStatement, CodeStatementDebuggable):
+    export_keyword: Token 
+    names: list[Token]
+    to_keyword: Token 
+    target_file: Token
+    debug: int
+
+# name 
+@dataclass 
+class ImportStatement(CodeStatement, CodeStatementKeywordable, CodeStatementDebuggable):
+    keyword: Token 
+    names: list[Token]
+    debug: int
 
 # idea: create a class that evaluates at runtime what a statement is, so then execute it 
 def split_into_statements(tokens: list[Token]) -> list[list[Token]]:
@@ -315,6 +334,15 @@ def create_scoped_code_statement(filename: str, tokens: list[Token], without_whi
     ]) 
     return tuple(possibilities)
 
+def is_proper_comma_list(without_whitespace: list[Token], accepted_tokens: frozenset[TokenType] = frozenset({TokenType.NAME})) -> bool:
+    looking_for_comma = without_whitespace[0].type != TokenType.COMMA
+    for t in without_whitespace[1:]:
+        if not looking_for_comma and t.type not in accepted_tokens or \
+           looking_for_comma and t.type != TokenType.COMMA:
+            return False
+        looking_for_comma = not looking_for_comma
+    return True
+
 def create_unscoped_code_statement(filename: str, tokens: list[Token], without_whitespace: list[Token], code: str) -> tuple[CodeStatement, ...]: 
 
     is_debug = tokens[-1].type == TokenType.QUESTION
@@ -332,7 +360,18 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
             expression = tokens[func_point_index + 1 : -1],
             debug = debug_level
         ),)])
-    
+
+    # import statement: import name, name, name!
+    can_be_import = all(t.type in {TokenType.NAME, TokenType.COMMA} for t in without_whitespace[:-1]) and \
+                    len(without_whitespace) >= 3 and is_proper_comma_list(without_whitespace[1:-1]) and \
+                    without_whitespace[0].type == TokenType.NAME and without_whitespace[1].type  == TokenType.NAME
+   
+    # export statement: export name, name, name to string/name!
+    can_be_export = all(t.type in {TokenType.NAME, TokenType.COMMA} for t in without_whitespace[:-1]) and \
+                    len(without_whitespace) >= 5 and is_proper_comma_list(without_whitespace[1:-3]) and \
+                    without_whitespace[0].type == TokenType.NAME and without_whitespace[1].type == TokenType.NAME and \
+                    without_whitespace[-2].type in {TokenType.NAME, TokenType.STRING} and without_whitespace[-3].type == TokenType.NAME
+
     # let's see what can be what D:
     can_be_return = without_whitespace[0].type == TokenType.NAME
     can_be_delete = can_be_return and len(without_whitespace) == 3 and \
@@ -403,6 +442,20 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
         possibilities.append(DeleteStatement(
             keyword = without_whitespace[0],
             name = without_whitespace[1],
+            debug = debug_level
+        ))
+    if can_be_import:
+        possibilities.append(ImportStatement(
+            keyword = without_whitespace[0],
+            names = [t for t in without_whitespace[1:-1] if t.type == TokenType.NAME],
+            debug = debug_level
+        ))
+    if can_be_export:
+        possibilities.append(ExportStatement(
+            export_keyword = without_whitespace[0],
+            names = [t for t in without_whitespace[-1:-3] if t.type == TokenType.NAME],
+            to_keyword = without_whitespace[-3],
+            target_file = without_whitespace[-2],
             debug = debug_level
         ))
     if can_be_var_declaration:
