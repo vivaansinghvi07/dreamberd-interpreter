@@ -1,6 +1,8 @@
 # DreamBerd Interpreter
 
-This is the interpreter for the perfect programming language. It is made in Python, for the sole reason that the interpreter can itself be interpreted. Future plans include creating a DreamBerd interpreter in DreamBerd, so that the DreamBerd Interpreter can be passed into the DreamBerd Interpreter Interpreter, which is then interpreted by the DreamBerd Interpreter Interpreter Interpreter (a.k.a. Python).
+This is the interpreter for the perfect programming language. It is made in Python, for the sole reason that the interpreter can itself be interpreted. Future plans include creating a DreamBerd interpreter in DreamBerd, so that the DreamBerd Interpreter can be passed into the DreamBerd Interpreter Interpreter, which is then interpreted by the DreamBerd Interpreter Interpreter Interpreter (a.k.a. Python). This may or may not be created due to difficulty moving everything over and whatnot. I'll try though.
+
+This is incredibly slow. My implementation of DreamBerd is suboptimal, which itself runs on a subperformant language (Python), which runs on a pretty fast language (C). However, speed was never a focus in creating my interpreter for DreamBerd and shouldn't be - it's not a language meant for day-to-day use - it's a work of art.
 
 ## Installation
 
@@ -33,7 +35,6 @@ options:
 ## TODO 
 
 - Add another expression type which is just the dot operator, used for indexing and accessing names
-- Add different files exporting and importing things across ?
 - Better debugging (pretty limited for the time being)
 - A much better standard library
 
@@ -450,6 +451,23 @@ Additionally, the `current` keyword lets you see into the present!!
 ```javascript
 const var score = 5!
 print(current score)! // 5
+```
+
+### Exporting
+
+Many languages allow you to import things from specific files. In DreamBerd, importing is simpler. Instead, you export _to_ specific files!
+
+```java
+===== add.db3 ==
+function add(a, b) => {
+   return a + b!
+}
+
+export add to "main.db3"!
+
+===== main.db3 ==
+import add!
+add(3, 2)!
 ```
 
 ### Classes

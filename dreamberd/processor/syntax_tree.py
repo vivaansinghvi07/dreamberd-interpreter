@@ -367,7 +367,7 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
                     without_whitespace[0].type == TokenType.NAME and without_whitespace[1].type  == TokenType.NAME
    
     # export statement: export name, name, name to string/name!
-    can_be_export = all(t.type in {TokenType.NAME, TokenType.COMMA} for t in without_whitespace[:-1]) and \
+    can_be_export = all(t.type in {TokenType.STRING, TokenType.NAME, TokenType.COMMA} for t in without_whitespace[:-1]) and \
                     len(without_whitespace) >= 5 and is_proper_comma_list(without_whitespace[1:-3]) and \
                     without_whitespace[0].type == TokenType.NAME and without_whitespace[1].type == TokenType.NAME and \
                     without_whitespace[-2].type in {TokenType.NAME, TokenType.STRING} and without_whitespace[-3].type == TokenType.NAME
@@ -453,7 +453,7 @@ def create_unscoped_code_statement(filename: str, tokens: list[Token], without_w
     if can_be_export:
         possibilities.append(ExportStatement(
             export_keyword = without_whitespace[0],
-            names = [t for t in without_whitespace[-1:-3] if t.type == TokenType.NAME],
+            names = [t for t in without_whitespace[1:-3] if t.type == TokenType.NAME],
             to_keyword = without_whitespace[-3],
             target_file = without_whitespace[-2],
             debug = debug_level

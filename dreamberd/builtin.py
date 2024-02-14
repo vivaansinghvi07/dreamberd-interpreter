@@ -317,7 +317,9 @@ def all_function_keywords() -> list[str]:
     return list(keywords)
 
 FUNCTION_KEYWORDS = all_function_keywords()
-KEYWORDS = {kw: Name(kw, DreamberdKeyword(kw)) for kw in ['class', 'className', 'after', 'const', 'var', 'when', 'if', 'async', 'return', 'delete', 'await', 'previous', 'next', 'reverse'] + FUNCTION_KEYWORDS}
+KEYWORDS = {kw: Name(kw, DreamberdKeyword(kw)) for kw in 
+    ['class', 'className', 'after', 'const', 'var', 'when', 'if', 'async', 
+     'return', 'delete', 'await', 'previous', 'next', 'reverse', 'export', 'import'] + FUNCTION_KEYWORDS}
 
 ############################################
 ##           DREAMBERD BUILTINS           ##

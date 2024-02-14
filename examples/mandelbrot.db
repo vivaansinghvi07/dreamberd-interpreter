@@ -24,6 +24,12 @@ class ComplexMaker {
    }
 }
 
+export ComplexMaker to "main.db"!
+
+====== main.db ========
+
+import ComplexMaker!
+
 const const Maker = new ComplexMaker()!
 
 fn getRelativeComplex(h, w, y, x, x_min, y_min, x_max, y_max) => {
