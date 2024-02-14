@@ -402,8 +402,11 @@ def evaluate_escape_sequences(val: DreamberdString) -> DreamberdString:  # this 
 
 def interpret_formatted_string(val: Token, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> DreamberdString:
     val_string = val.value
-    locale.setlocale(locale.LC_ALL, locale.getlocale()[0])
-    symbol: str = locale.localeconv()['currency_symbol']  # type: ignore
+    try:
+        locale.setlocale(locale.LC_ALL, locale.getlocale()[0])
+        symbol: str = locale.localeconv()['currency_symbol']  # type: ignore 
+    except locale.Error:
+        symbol = '$'
     if not any(indeces := [val_string[i:i+len(symbol)] == symbol for i in range(len(val_string) - len(symbol))]):
         return DreamberdString(val_string)
     try:

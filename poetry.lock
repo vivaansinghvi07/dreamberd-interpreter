@@ -618,4 +618,4 @@ input = ["pynput"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "de713ee872f573ce6c5c910031dca1637852aba262dc450f9d34a4db0985a069"
+content-hash = "c9befcfb2a94ccba7247cc93dce72f68f4929bed9a8e713c856b747462194fa4"

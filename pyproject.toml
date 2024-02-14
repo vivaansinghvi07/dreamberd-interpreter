@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dreamberd"
-version = "0.0.10"
+version = "0.0.11"
 description = "An interpreter for the perfect programming language, DreamBerd."
 readme = "README.md"
 authors = ["Vivaan Singhvi <singhvi.vivaan@gmail.com>"]
@@ -9,6 +9,7 @@ authors = ["Vivaan Singhvi <singhvi.vivaan@gmail.com>"]
 python = "^3.10"
 pynput = "1.7.6"
 pygithub = "2.2.0"
+requests = "2.31.0"
 
 [tool.poetry.scripts]
 dreamberd = "dreamberd:main"
