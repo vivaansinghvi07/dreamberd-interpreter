@@ -394,7 +394,7 @@ print("Hello £{name}!")!
 print("Hello ¥{name}!")!
 ```
 
-> Note: It was specified in the original repo to allow developers to follow their local typographical norms. While I think I could, that is not something I want to do and therefore I will not do it.
+> Note: It was specified in the original repo to allow developers to follow their local typographical norms. While I think I could, that is not something I want to do and therefore I will not do it. Additionally, if the regional currency cannot be determined, the interpolation symbol defaults to the dollar sign.
 
 ### Types
 
