@@ -47,6 +47,7 @@ def run_repl() -> None:
     namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]  # type: ignore
     load_globals(__REPL_FILENAME, "", {}, set(), [], {})
     load_global_dreamberd_variables(namespaces)
+    load_public_global_variables(namespaces)
     async_statements = []
     when_statement_watchers = [{}]
     while True: 

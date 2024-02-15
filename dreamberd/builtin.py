@@ -165,7 +165,7 @@ class DreamberdNumber(DreamberdIndexable, DreamberdMutable):
             index_num = round(index.value) + 1
             self.value = sign * int(self_val_str[:index_num] + str(round(val.value)) + self_val_str[index_num + 1:])
         else:  # assign in the middle of the array
-            index_num = max((index.value + 1) // 1, 0)
+            index_num = round(max((index.value + 1) // 1, 0))
             self.value = sign * int(self_val_str[:index_num] + str(round(val.value)) + self_val_str[index_num:])
 
 @dataclass(unsafe_hash=True)
@@ -205,7 +205,7 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
             index_num = round(index.value) + 1
             self.value = self.value[:index_num] + val_str + self.value[index_num + 1:]
         else:  # assign in the middle of the array
-            index_num = max((index.value + 1) // 1, 0)
+            index_num = round(max((index.value + 1) // 1, 0))
             self.value = self.value[:index_num] + val_str + self.value[index_num:]
         self.create_namespace()
 
