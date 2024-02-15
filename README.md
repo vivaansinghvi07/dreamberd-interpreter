@@ -359,14 +359,13 @@ const const name = "Luke"!
 They can also be declared with triple quotes.
 
 ```javascript
-const const name = '''Lu'''!
 const const name = "'Lu'"!
 ```
 
 In fact, you can use any number of quotes you want.
 
 ```javascript
-const const name = """"Luke""""!
+const const name = '""""Luke"""'"!
 ```
 
 Even zero.
