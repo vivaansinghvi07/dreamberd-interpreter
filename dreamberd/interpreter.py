@@ -255,13 +255,13 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
             
     elif is_lifetime_temporal:
         def remove_lifetime(lifetime: str, target_var: Variable, target_lifetime: VariableLifetime, error_line: int):
-            if lifetime[-1] not in ['s', 'm'] or all(c.isdigit() for c in lifetime[:-1]):
+            if lifetime[-1] not in ['s', 'm'] or not all(c.isdigit() for c in lifetime[:-1]):
                 raise_error_at_line(filename, code, error_line, "Invalid time unit for variable lifetime.")
             sleep(int(lifetime[:-1]) if lifetime[-1] == 's' else int(lifetime[:-1] * 60))
             for i, lt in reversed([*enumerate(target_var.lifetimes)]):
                 if lt is target_lifetime:
                     del target_var.lifetimes[i]
-        Thread(target=remove_lifetime, args=(lifetime, target_var, target_lifetime)).start()
+        Thread(target=remove_lifetime, args=(lifetime, target_var, target_lifetime, current_line)).start()
 
 def assign_variable(statement: VariableAssignment, indexes: list[Value], new_value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
     name, confidence, debug = statement.name.value, statement.confidence, statement.debug
