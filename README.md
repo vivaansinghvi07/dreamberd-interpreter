@@ -37,6 +37,8 @@ options:
 - Add another expression type which is just the dot operator, used for indexing and accessing names
 - Better debugging (pretty limited for the time being)
 - A much better standard library
+- Allow for declaring basic objects with {} and other things.
+- Add a way to deal with file objects
 
 ## Absent Features
 

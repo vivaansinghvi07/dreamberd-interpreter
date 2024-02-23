@@ -371,6 +371,8 @@ def db_to_string(val: Value) -> DreamberdString:
             return_string = "undefined"
         case DreamberdKeyword():
             return_string = val.value
+        case DreamberdMap():
+            return_string = f'{{{", ".join([f"{k}: {db_to_string(v).value}" for k, v in val.self_dict.items()])}}}'
     return DreamberdString(return_string)
 
 def db_print(*vals: Value) -> None:
