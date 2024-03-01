@@ -117,7 +117,7 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
             raise NonFormattedError("Cannot index a list with a non-number value.")
         if not is_int(index.value):
             raise NonFormattedError("Expected integer for list indexing.")
-        elif not -1 <= index.value <= len(self.values) - 1:
+        elif not -1 <= index.value <= len(self.values) - 2:
             raise NonFormattedError("Indexing out of list bounds.")
         return self.values[round(index.value) + 1]
 
