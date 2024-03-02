@@ -1193,14 +1193,14 @@ def execute_after_statement(event: Value, statements_inside_scope: list[tuple[Co
             def on_release(key: Optional[Union[keyboard.Key, keyboard.KeyCode]]):
                 nonlocal namespaces, statements_inside_scope
                 if key in keys:
-                    interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_keyboard_event_object(key, event.value))}], [], when_statement_watchers + [{}])
+                    interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_keyboard_event_object(key.char if isinstance(key, keyboard.KeyCode) else key, event.value))}], [], when_statement_watchers + [{}])
                 keys.discard(key)
             listener = keyboard.Listener(on_press=on_press, on_release=on_release)  # type: ignore
 
         case "keydown":
             def on_press(key: Optional[Union[keyboard.Key, keyboard.KeyCode]]):
                 nonlocal namespaces, statements_inside_scope
-                interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_keyboard_event_object(key, event.value))}], [], when_statement_watchers + [{}])
+                interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_keyboard_event_object(key.char if isinstance(key, keyboard.KeyCode) else key, event.value))}], [], when_statement_watchers + [{}])
             listener = keyboard.Listener(on_press=on_press)  # type: ignore
 
         case "keyup":
