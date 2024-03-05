@@ -207,7 +207,7 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
         case _: 
             expr = get_built_expression(statement.expression)
             names = gather_names_or_values(expr)
-            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.\nThe value of each name in the exprehttps://accounts.spotify.com/en/login?continue=https%3A%2F%2Fopen.spotify.com%2Fplaylist%2F0jqXRIN34QAfwEiB72S4H7%3Fsi%3D6f53123059f741ec%26pt%3D09c9c4118ece8f2d0fad56d9f2a4345ession is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name_token, namespaces)).value}' for name in names])}\nThe expression used to get this value is: \n{expr.to_string()}", statement.name)
+            debug_print(filename, code, f"Setting {' '.join([mod.value for mod in statement.modifiers])} variable \"{statement.name.value}\" to {db_to_string(value).value} with a lifetime of {lifetime}.\nThe value of each name in the expression is the following: \n{chr(10).join([f'  {name}: {db_to_string(get_value_from_namespaces(name_token, namespaces)).value}' for name in names])}\nThe expression used to get this value is: \n{expr.to_string()}", statement.name)
 
     # check if there is a watcher for this name
     watchers_key = (name, id(namespaces[-1]))
