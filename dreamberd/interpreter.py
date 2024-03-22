@@ -3,6 +3,7 @@
 # to make sure it recognizes that and doesn't yell at me because I don't like being yelled at
 
 # thanks to Indently, I have now discovered the NoReturn type, and pyright shuts up :))))))))))))))))
+# i don't set column limits; if the code fits on my screen it's good.
 
 from __future__ import annotations
 import os
