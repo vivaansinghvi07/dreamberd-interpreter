@@ -9,6 +9,21 @@ from dreamberd.base import NonFormattedError
 
 from dreamberd.processor.syntax_tree import CodeStatement
 
+__all__ = [
+    'DreamberdFunction',
+    'BuiltinFunction',
+    'DreamberdList',
+    'DreamberdNumber',
+    'DreamberdString',
+    'DreamberdBoolean',
+    'DreamberdUndefined',
+    'DreamberdSpecialBlankValue',
+    'DreamberdObject',
+    'DreamberdMap',
+    'DreamberdKeyword',
+    'DreamberdPromise'
+]
+
 FLOAT_TO_INT_PREC = 0.00000001
 def is_int(x: Union[float, int]) -> bool:
     return min(x % 1, 1 - x % 1) < FLOAT_TO_INT_PREC
@@ -92,7 +107,7 @@ class BuiltinFunction(Value):
     modifies_caller: bool = False
 
 @dataclass 
-class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable):
+class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, Value):
     values: list[Value]
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
@@ -134,7 +149,7 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
             self.create_namespace()
 
 @dataclass(unsafe_hash=True)
-class DreamberdNumber(DreamberdIndexable, DreamberdMutable):
+class DreamberdNumber(DreamberdIndexable, DreamberdMutable, Value):
     value: Union[int, float]
 
     def _get_self_str(self) -> str:
@@ -169,7 +184,7 @@ class DreamberdNumber(DreamberdIndexable, DreamberdMutable):
             self.value = sign * int(self_val_str[:index_num] + str(round(val.value)) + self_val_str[index_num:])
 
 @dataclass(unsafe_hash=True)
-class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable):
+class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, Value):
     value: str = field(hash=True)
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict, hash=False)
 

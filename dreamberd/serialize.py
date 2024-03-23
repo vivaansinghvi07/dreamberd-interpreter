@@ -3,7 +3,12 @@ import dataclasses
 from typing import Any, Callable, Type, Union, assert_never
 from dreamberd.base import NonFormattedError, Token, TokenType
 
-from dreamberd.builtin import KEYWORDS, BuiltinFunction, DreamberdList, DreamberdNumber, DreamberdString, Name, Value, Variable
+# BAD PRACTICE !!!
+from dreamberd.builtin import *
+from dreamberd.processor.syntax_tree import *
+
+from dreamberd.builtin import db_str_push, db_list_pop, db_list_push, db_str_pop  
+from dreamberd.builtin import KEYWORDS, BuiltinFunction, Name, Value, Variable
 from dreamberd.interpreter import interpret_code_statements, load_globals
 from dreamberd.processor.lexer import tokenize
 from dreamberd.processor.syntax_tree import CodeStatement, generate_syntax_tree
@@ -33,7 +38,7 @@ def serialize_python_obj(obj: Any) ->  dict[str, Union[str, dict, list]]:
             val = {k: serialize_obj(v) for k, v in obj.items()}
         case list() | tuple(): val = [serialize_obj(x) for x in obj]
         case str(): val = obj
-        case int() | float(): val = str(obj)
+        case None | int() | float() | bool(): val = str(obj)
         case func if isinstance(func, Callable): val = func.__name__
         case _: assert_never(obj)
     return {
@@ -43,21 +48,30 @@ def serialize_python_obj(obj: Any) ->  dict[str, Union[str, dict, list]]:
 
 def deserialize_python_obj(val: dict) -> Any:
     if val["python_obj_type"] not in [
-        'int', 'float', 'dict', 'function', 'list', 'tuple', 'str', 'TokenType'
+        'int', 'float', 'dict', 'function', 'list', 
+        'tuple', 'str', 'TokenType', 'NoneType', 'bool'
     ]: 
+        print(val["python_obj_type"])
         raise NonFormattedError("Invalid `python_obj_type` detected in deserialization.")
     
     match val["python_obj_type"]:
         case 'list': return [deserialize_obj(x) for x in val["value"]]
         case 'tuple': return tuple(deserialize_obj(x) for x in val["value"])
         case 'dict': return {k: deserialize_obj(v) for k, v in val["value"].items()}
-        case 'int' | 'float' | 'str': return eval(val["python_obj_type"])(val["value"])
+        case 'int' | 'float' | 'str': return eval(val["python_obj_type"])(val["value"])  # RAISES ValueError
+        case 'NoneType': return None
+        case 'bool': 
+            if val["value"] not in ["True", "False"]:
+                raise NonFormattedError("Invalid boolean detected in object deserialization.")
+            return eval(val["value"])
         case 'TokenType': 
             if v := TokenType.from_val(val["value"]):
                 return v
             raise NonFormattedError("Invalid TokenType detected in object deserialization.")
         case 'function':
-            if not (v := KEYWORDS.get(val["value"])) or not isinstance(v.value, BuiltinFunction):
+            if val["value"] in ["db_list_pop", "db_list_push", "db_str_pop", "db_str_push"]:
+                return eval(val["value"])  # trust me bro this is W code
+            if (not (v := KEYWORDS.get(val["value"])) or not isinstance(v.value, BuiltinFunction)):
                 raise NonFormattedError("Invalid builtin function detected in object deserialization.")
             return v.value.function
         case invalid: assert_never(invalid)
@@ -86,7 +100,7 @@ def deserialize_dreamberd_obj(val: dict) -> DataclassSerializations:
     
     # beautiful, elegant, error-free, safe python code :D
     attrs = {
-        at["name"]: deserialize_obj(at["values"])
+        at["name"]: deserialize_obj(at["value"])
         for at in val["attributes"]
     }
     return eval(val["dreamberd_obj_type"])(**attrs)
@@ -107,5 +121,7 @@ if __name__ == "__main__":
         DreamberdNumber(123.45), 
         func_ns["main"].value
     ])
-    __import__('pprint').pprint(serialize_obj(list_test_case))
+    serialized = serialize_obj(list_test_case)
+    __import__('pprint').pprint(serialized)
+    assert list_test_case == deserialize_obj(serialized)
         
