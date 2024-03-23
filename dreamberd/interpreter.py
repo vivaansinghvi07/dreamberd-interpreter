@@ -144,7 +144,7 @@ def load_public_global_variables(namespaces: list[Namespace]) -> None:
         name, address, confidence = line.split(DB_VAR_TO_VALUE_SEP)
         can_be_reset = can_edit_value = False  # these were const 
 
-        serialized_value = requests.get(f"{repo_url}/global_objects/{address}").text
+        serialized_value = requests.get(f"{repo_url}/serialized_objects/{address}").text
         try:
             value = deserialize_obj(json.loads(serialized_value))
             namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence), can_be_reset, can_edit_value)], [])
