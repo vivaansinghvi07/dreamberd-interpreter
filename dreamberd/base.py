@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import NoReturn
+from typing import NoReturn, Optional
 from dataclasses import dataclass, field
 
 ALPH_NUMS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.')
@@ -86,6 +86,10 @@ class TokenType(Enum):
     NEWLINE = '\n'
     SINGLE_QUOTE = "'"  # this is ugly as hell
     DOUBLE_QUOTE = '"'
+
+    @classmethod
+    def from_val(cls, val: str) -> Optional[TokenType]:
+        return {v.value: v for v in list(cls)}.get(val)
 
 class OperatorType(Enum):
     ADD = '+'
