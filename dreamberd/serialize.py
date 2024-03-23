@@ -9,7 +9,6 @@ from dreamberd.processor.syntax_tree import *
 
 from dreamberd.builtin import db_str_push, db_list_pop, db_list_push, db_str_pop  
 from dreamberd.builtin import KEYWORDS, BuiltinFunction, Name, Value, Variable
-from dreamberd.interpreter import interpret_code_statements, load_globals
 from dreamberd.processor.lexer import tokenize
 from dreamberd.processor.syntax_tree import CodeStatement, generate_syntax_tree
 
@@ -107,19 +106,9 @@ def deserialize_dreamberd_obj(val: dict) -> DataclassSerializations:
 
 if __name__ == "__main__":
 
-    code = """f main() => {
-      print "Hello world"!
-      }"""
-    tokens = tokenize("", code)
-    statements = generate_syntax_tree("", tokens, code)
-    func_ns = KEYWORDS.copy()
-    load_globals("", "", {}, set(), [], {})
-    interpret_code_statements(statements, [func_ns], [], [{}])
-
     list_test_case = DreamberdList([
         DreamberdString("Hello world!"),
         DreamberdNumber(123.45), 
-        func_ns["main"].value
     ])
     serialized = serialize_obj(list_test_case)
     __import__('pprint').pprint(serialized)

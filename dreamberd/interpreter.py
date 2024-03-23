@@ -8,6 +8,7 @@
 from __future__ import annotations
 import os
 import re
+import json
 import locale
 import random
 import pickle
@@ -33,6 +34,7 @@ except ImportError:
 
 from dreamberd.base import NonFormattedError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
 from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdSpecialBlankValue, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
+from dreamberd.serialize import serialize_obj, deserialize_obj
 from dreamberd.processor.lexer import tokenize as db_tokenize
 from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
 from dreamberd.processor.syntax_tree import AfterStatement, ClassDeclaration, CodeStatement, CodeStatementKeywordable, Conditional, DeleteStatement, ExportStatement, ExpressionStatement, FunctionDefinition, ImportStatement, ReturnStatement, ReverseStatement, VariableAssignment, VariableDeclaration, WhenStatement
@@ -136,16 +138,18 @@ def load_global_dreamberd_variables(namespaces: list[Namespace]) -> None:
             namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence), can_be_reset, can_edit_value)], [])
 
 def load_public_global_variables(namespaces: list[Namespace]) -> None:
-    repo_url = "https://raw.githubusercontent.com/vivaansinghvi07/dreamberd-interpreter-globals/main"
+    repo_url = "https://raw.githubusercontent.com/vivaansinghvi07/dreamberd-interpreter-globals-patched/main"
     for line in requests.get(f"{repo_url}/public_globals.txt").text.split("\n"):
         if not line.strip(): continue
         name, address, confidence = line.split(DB_VAR_TO_VALUE_SEP)
         can_be_reset = can_edit_value = False  # these were const 
 
-        encoded_value = requests.get(f"{repo_url}/global_objects/{address}").text
-        byte_list = [int(encoded_value[i:i+4]) for i in range(0, len(encoded_value), 4)]
-        value = pickle.loads(bytearray(byte_list))
-        namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence), can_be_reset, can_edit_value)], [])
+        serialized_value = requests.get(f"{repo_url}/global_objects/{address}").text
+        try:
+            value = deserialize_obj(json.loads(serialized_value))
+            namespaces[-1][name] = Variable(name, [VariableLifetime(value, 100000000000, int(confidence), can_be_reset, can_edit_value)], [])
+        except (json.JSONDecodeError, NonFormattedError, ValueError):
+            print(f"\033[33mWarning: Public global variable `{name}` access failed.\033[39m")
 
 def open_global_variable_issue(name: str, value: Value, confidence: int):
     if not GITHUB_IMPORTED:
@@ -155,11 +159,7 @@ def open_global_variable_issue(name: str, value: Value, confidence: int):
     except KeyError:
         raise_error_at_line(filename, code, current_line, "To declare public globals, you must set the GITHUB_ACCESS_TOKEN to a personal access token.")
 
-    # transform the variable into a value string
-    value_bytes = list(pickle.dumps(value))
-    issue_body = "".join([str(b).rjust(4, '0') for b in value_bytes])
-
-    # post the variable as an issue to the main github repo
+    issue_body = json.dumps(serialize_obj(value))
     with github.Github(auth=github.Auth.Token(access_token)) as g:   # type: ignore 
         repo = g.get_repo("vivaansinghvi07/dreamberd-interpreter-globals")
         repo.create_issue(f"Create Public Global: {name}{DB_VAR_TO_VALUE_SEP}{confidence}", issue_body)
