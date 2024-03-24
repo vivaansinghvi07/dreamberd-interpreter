@@ -5,7 +5,7 @@ from time import sleep
 from typing import Optional, Union
 from dreamberd.base import InterpretationError, NonFormattedError, Token, TokenType
 
-from dreamberd.builtin import KEYWORDS, Name, Value, Variable
+from dreamberd.builtin import KEYWORDS, Name, DreamberdValue, Variable
 from dreamberd.processor.lexer import tokenize
 from dreamberd.processor.syntax_tree import generate_syntax_tree
 from dreamberd.interpreter import interpret_code_statements, interpret_code_statements_main_wrapper, load_global_dreamberd_variables, load_globals, load_public_global_variables
@@ -78,7 +78,7 @@ def run_file(main_filename: str) -> None:  # idk what else to call this
         files = [(None, ''.join(code_lines))]
     
     # execute code for each file
-    importable_names: dict[str, dict[str, Value]] = {} 
+    importable_names: dict[str, dict[str, DreamberdValue]] = {} 
     for filename, code in files:
         filename = filename or "__unnamed_file__"
         tokens = tokenize(filename, code)
@@ -86,7 +86,7 @@ def run_file(main_filename: str) -> None:  # idk what else to call this
 
         # load variables and run the code
         namespaces: list[dict[str, Union[Variable, Name]]] = [KEYWORDS.copy()]   # type: ignore
-        exported_names: list[tuple[str, str, Value]] = []
+        exported_names: list[tuple[str, str, DreamberdValue]] = []
         load_globals(filename, code, {}, set(), exported_names, importable_names.get(filename, {}))
         load_global_dreamberd_variables(namespaces)
         load_public_global_variables(namespaces)

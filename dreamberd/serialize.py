@@ -8,16 +8,15 @@ from dreamberd.builtin import *
 from dreamberd.processor.syntax_tree import *
 
 from dreamberd.builtin import db_str_push, db_list_pop, db_list_push, db_str_pop  
-from dreamberd.builtin import KEYWORDS, BuiltinFunction, Name, Value, Variable
-from dreamberd.processor.lexer import tokenize
-from dreamberd.processor.syntax_tree import CodeStatement, generate_syntax_tree
+from dreamberd.builtin import KEYWORDS, BuiltinFunction, Name, DreamberdValue, Variable
+from dreamberd.processor.syntax_tree import CodeStatement
 
 SerializedDict = dict[str, Union[str, dict, list]]
-DataclassSerializations = Union[Name, Variable, Value, CodeStatement, Token]
+DataclassSerializations = Union[Name, Variable, DreamberdValue, CodeStatement, Token]
 
 def serialize_obj(obj: Any) -> SerializedDict:
     match obj:
-        case Name() | Variable() | Value() | CodeStatement() | Token(): return serialize_dreamberd_obj(obj)
+        case Name() | Variable() | DreamberdValue() | CodeStatement() | Token(): return serialize_dreamberd_obj(obj)
         case _: return serialize_python_obj(obj)
 
 def deserialize_obj(val: dict) -> Any:
@@ -93,7 +92,7 @@ def get_subclass_name_list(cls: Type[DataclassSerializations]) -> list[str]:
 def deserialize_dreamberd_obj(val: dict) -> DataclassSerializations:
     if val["dreamberd_obj_type"] not in [
         "Name", "Variable", "Token", 
-        *get_subclass_name_list(CodeStatement), *get_subclass_name_list(Value)
+        *get_subclass_name_list(CodeStatement), *get_subclass_name_list(DreamberdValue)
     ]:
         raise NonFormattedError("Invalid `dreamberd_obj_type` detected in deserialization.")
     

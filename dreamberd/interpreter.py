@@ -33,7 +33,7 @@ except ImportError:
     GITHUB_IMPORTED = False
 
 from dreamberd.base import NonFormattedError, OperatorType, Token, TokenType, debug_print, debug_print_no_token, raise_error_at_line, raise_error_at_token
-from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdSpecialBlankValue, DreamberdString, DreamberdUndefined, Name, Variable, Value, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
+from dreamberd.builtin import FLOAT_TO_INT_PREC, BuiltinFunction, DreamberdBoolean, DreamberdFunction, DreamberdIndexable, DreamberdKeyword, DreamberdList, DreamberdMap, DreamberdMutable, DreamberdNamespaceable, DreamberdNumber, DreamberdObject, DreamberdPromise, DreamberdSpecialBlankValue, DreamberdString, DreamberdUndefined, Name, Variable, DreamberdValue, VariableLifetime, db_not, db_to_boolean, db_to_number, db_to_string, is_int
 from dreamberd.serialize import serialize_obj, deserialize_obj
 from dreamberd.processor.lexer import tokenize as db_tokenize
 from dreamberd.processor.expression_tree import ExpressionTreeNode, FunctionNode, ListNode, SingleOperatorNode, ValueNode, IndexNode, ExpressionNode, build_expression_tree, get_expr_first_token
@@ -71,7 +71,7 @@ def get_modified_prev_name(name: str) -> str:
     return f"{name.replace('.', '__')}__prev"
 
 # i believe this function is exclusively called from the evaluate_expression function
-def evaluate_normal_function(expr: FunctionNode, func: Union[DreamberdFunction, BuiltinFunction], namespaces: list[Namespace], args: list[Value], when_statement_watchers: WhenStatementWatchers) -> Value:
+def evaluate_normal_function(expr: FunctionNode, func: Union[DreamberdFunction, BuiltinFunction], namespaces: list[Namespace], args: list[DreamberdValue], when_statement_watchers: WhenStatementWatchers) -> DreamberdValue:
 
     # check to evaluate builtin
     if isinstance(func, BuiltinFunction):
@@ -86,7 +86,7 @@ def evaluate_normal_function(expr: FunctionNode, func: Union[DreamberdFunction, 
     new_namespace: Namespace = {name: Name(name, arg) for name, arg in zip(func.args, args)}
     return interpret_code_statements(func.code, namespaces + [new_namespace], [], when_statement_watchers + [{}]) or DreamberdUndefined()
 
-def register_async_function(expr: FunctionNode, func: DreamberdFunction, namespaces: list[Namespace], args: list[Value], async_statements: AsyncStatements) -> None:
+def register_async_function(expr: FunctionNode, func: DreamberdFunction, namespaces: list[Namespace], args: list[DreamberdValue], async_statements: AsyncStatements) -> None:
     """ Adds a job to the async statements queue, which is accessed in the interpret_code_statements function. """
     if len(func.args) > len(args):
         raise_error_at_token(filename, code, f"Expected more arguments for function call with {len(func.args)} argument{'s' if len(func.args) != 1 else ''}.", expr.name)
@@ -151,7 +151,7 @@ def load_public_global_variables(namespaces: list[Namespace]) -> None:
         except (json.JSONDecodeError, NonFormattedError, ValueError):
             print(f"\033[33mWarning: Public global variable `{name}` access failed.\033[39m")
 
-def open_global_variable_issue(name: str, value: Value, confidence: int):
+def open_global_variable_issue(name: str, value: DreamberdValue, confidence: int):
     if not GITHUB_IMPORTED:
         raise_error_at_line(filename, code, current_line, "Cannot create a public global variable without a the GitHub API imported.")
     try:
@@ -164,7 +164,7 @@ def open_global_variable_issue(name: str, value: Value, confidence: int):
         repo = g.get_repo("vivaansinghvi07/dreamberd-interpreter-globals")
         repo.create_issue(f"Create Public Global: {name}{DB_VAR_TO_VALUE_SEP}{confidence}", issue_body)
 
-def declare_new_variable(statement: VariableDeclaration, value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
+def declare_new_variable(statement: VariableDeclaration, value: DreamberdValue, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
 
     name, lifetime, confidence, debug, modifiers = statement.name.value, statement.lifetime, statement.confidence, statement.debug, statement.modifiers 
     name_token = statement.name  # for error handling purposes
@@ -264,7 +264,7 @@ def declare_new_variable(statement: VariableDeclaration, value: Value, namespace
                     del target_var.lifetimes[i]
         Thread(target=remove_lifetime, args=(lifetime, target_var, target_lifetime, current_line)).start()
 
-def assign_variable(statement: VariableAssignment, indexes: list[Value], new_value: Value, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
+def assign_variable(statement: VariableAssignment, indexes: list[DreamberdValue], new_value: DreamberdValue, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
     name, confidence, debug = statement.name.value, statement.confidence, statement.debug
     name_token = statement.name
         
@@ -296,7 +296,7 @@ def assign_variable(statement: VariableAssignment, indexes: list[Value], new_val
     if indexes:
 
         # goes down the list until it can assign something in the list
-        def assign_variable_helper(value_to_modify: Value, remaining_indexes: list[Value]):
+        def assign_variable_helper(value_to_modify: DreamberdValue, remaining_indexes: list[DreamberdValue]):
             if not value_to_modify or not isinstance(value_to_modify, DreamberdIndexable):
                 raise_error_at_line(filename, code, name_token.line, "Attempted to index into an un-indexable object.")
             index = remaining_indexes.pop(0) 
@@ -354,7 +354,7 @@ def assign_variable(statement: VariableAssignment, indexes: list[Value], new_val
         execute_conditional(condition_val, inside_statements, namespaces, when_statement_watchers)
         visited_whens.append(when_watcher)
 
-def get_value_from_promise(val: DreamberdPromise) -> Value:
+def get_value_from_promise(val: DreamberdPromise) -> DreamberdValue:
     if val.value is None:
         return DreamberdUndefined()
     return val.value
@@ -437,7 +437,7 @@ def interpret_formatted_string(val: Token, namespaces: list[Namespace], async_st
     except IndexError:
         raise_error_at_line(filename, code, current_line, "Invalid interpolated string formatting.")
 
-def determine_non_name_value(val: Token) -> Value:
+def determine_non_name_value(val: Token) -> DreamberdValue:
     """ 
     Takes a string/Token and determines if the value is a number, string, or invalid. 
     Valid names should have been found already by the previous function.
@@ -453,7 +453,7 @@ def determine_non_name_value(val: Token) -> Value:
         raise_error_at_line(filename, code, val.line, f"The value {retval.value} has been deleted.")
     return retval
 
-def is_approx_equal(left: Value, right: Value) -> DreamberdBoolean:
+def is_approx_equal(left: DreamberdValue, right: DreamberdValue) -> DreamberdBoolean:
 
     if is_really_really_equal(left, right).value:
         return DreamberdBoolean(True)
@@ -514,7 +514,7 @@ def is_approx_equal(left: Value, right: Value) -> DreamberdBoolean:
 
     return DreamberdBoolean(None)
 
-def is_equal(left: Value, right: Value) -> DreamberdBoolean:
+def is_equal(left: DreamberdValue, right: DreamberdValue) -> DreamberdBoolean:
 
     if isinstance(left, DreamberdString) or isinstance(right, DreamberdString):
         return DreamberdBoolean(db_to_string(left).value == db_to_string(right).value)
@@ -549,7 +549,7 @@ def is_equal(left: Value, right: Value) -> DreamberdBoolean:
 
     return DreamberdBoolean(None)
 
-def is_really_equal(left: Value, right: Value) -> DreamberdBoolean:
+def is_really_equal(left: DreamberdValue, right: DreamberdValue) -> DreamberdBoolean:
     if type(left) != type(right):
         return DreamberdBoolean(False)
     match left, right:  # i know these are horribly verbose but if i don't do this my LSP yells at me
@@ -574,10 +574,10 @@ def is_really_equal(left: Value, right: Value) -> DreamberdBoolean:
                                     all([is_really_equal(left.self_dict[k], right.self_dict[k]).value for k in left.self_dict]))
     return DreamberdBoolean(None)
 
-def is_really_really_equal(left: Value, right: Value) -> DreamberdBoolean:
+def is_really_really_equal(left: DreamberdValue, right: DreamberdValue) -> DreamberdBoolean:
     return DreamberdBoolean(left is right)
 
-def is_less_than(left: Value, right: Value) -> DreamberdBoolean:
+def is_less_than(left: DreamberdValue, right: DreamberdValue) -> DreamberdBoolean:
     if type(left) != type(right):
         raise_error_at_line(filename, code, current_line, f"Cannot compare value of type {type(left).__name__} with one of type {type(right).__name__}.")
     match left, right:
@@ -599,7 +599,7 @@ def is_less_than(left: Value, right: Value) -> DreamberdBoolean:
             raise_error_at_line(filename, code, current_line, f"Comparison not supported between elements of type {type(left).__name__}.")
     return DreamberdBoolean(None)
 
-def perform_single_value_operation(val: Value, operator_token: Token) -> Value: 
+def perform_single_value_operation(val: DreamberdValue, operator_token: Token) -> DreamberdValue: 
     match operator_token.type:
         case TokenType.SUBTRACT:
             match val:
@@ -616,7 +616,7 @@ def perform_single_value_operation(val: Value, operator_token: Token) -> Value:
             return db_not(val_bool) 
     raise_error_at_token(filename, code, "Something went wrong. My bad.", operator_token)
 
-def perform_two_value_operation(left: Value, right: Value, operator: OperatorType, operator_token: Token) -> Value:
+def perform_two_value_operation(left: DreamberdValue, right: DreamberdValue, operator: OperatorType, operator_token: Token) -> DreamberdValue:
     match operator:
         case OperatorType.ADD:
             if isinstance(left, DreamberdString) or isinstance(right, DreamberdString):
@@ -688,7 +688,7 @@ def perform_two_value_operation(left: Value, right: Value, operator: OperatorTyp
 
     raise_error_at_token(filename, code, "Something went wrong here.", operator_token)
 
-def get_value_from_namespaces(name_or_value: Token, namespaces: list[Namespace]) -> Value:
+def get_value_from_namespaces(name_or_value: Token, namespaces: list[Namespace]) -> DreamberdValue:
 
     # what the frick am i doing rn
     if v := get_name_from_namespaces(name_or_value.value, namespaces):
@@ -697,7 +697,7 @@ def get_value_from_namespaces(name_or_value: Token, namespaces: list[Namespace])
         return v.value
     return determine_non_name_value(name_or_value)
 
-def print_expression_debug(debug: int, expr: Union[list[Token], ExpressionTreeNode], value: Value, namespaces: list[Namespace]) -> None:
+def print_expression_debug(debug: int, expr: Union[list[Token], ExpressionTreeNode], value: DreamberdValue, namespaces: list[Namespace]) -> None:
     expr = get_built_expression(expr)
     msg = None
     match debug:
@@ -717,14 +717,14 @@ def print_expression_debug(debug: int, expr: Union[list[Token], ExpressionTreeNo
     else: debug_print_no_token(filename, msg)
 
 
-def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers, *, ignore_string_escape_sequences: bool = False) -> Value:
+def evaluate_expression(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers, *, ignore_string_escape_sequences: bool = False) -> DreamberdValue:
     """ Wrapper for the evaluate_expression_for_real function that checks deleted values on each run. """
     retval = evaluate_expression_for_real(expr, namespaces, async_statements, when_statement_watchers, ignore_string_escape_sequences)
     if isinstance(retval, (DreamberdNumber, DreamberdString)) and retval in deleted_values:
         raise_error_at_line(filename, code, current_line, f"The value {retval.value} has been deleted.")
     return retval
 
-def evaluate_expression_for_real(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers, ignore_string_escape_sequences: bool) -> Value:
+def evaluate_expression_for_real(expr: Union[list[Token], ExpressionTreeNode], namespaces: list[dict[str, Union[Variable, Name]]], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers, ignore_string_escape_sequences: bool) -> DreamberdValue:
 
     expr = get_built_expression(expr)
     match expr:
@@ -1130,7 +1130,7 @@ def clear_temp_namespace(namespaces: list[Namespace], temp_namespace: Namespace)
         del namespaces[-1][key]
 
 # simply execute the conditional inside a new scope
-def execute_conditional(condition: Value, statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], when_statement_watchers: WhenStatementWatchers) -> Optional[Value]:
+def execute_conditional(condition: DreamberdValue, statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], when_statement_watchers: WhenStatementWatchers) -> Optional[DreamberdValue]:
     condition = db_to_boolean(condition)
     execute = condition.value == True if condition.value is not None else random.random() < 0.50
     if execute:  
@@ -1151,7 +1151,7 @@ def get_keyboard_event_object(key: Optional[Union[keyboard.Key, keyboard.KeyCode
         'event': Name('event', DreamberdString(event)),
     })
 
-def execute_after_statement(event: Value, statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], when_statement_watchers: WhenStatementWatchers) -> None:
+def execute_after_statement(event: DreamberdValue, statements_inside_scope: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], when_statement_watchers: WhenStatementWatchers) -> None:
 
     if not KEY_MOUSE_IMPORTED:
         raise_error_at_line(filename, code, current_line, "Attempted to use mouse and keyboard functionality without importing the [input] extra dependency.")
@@ -1262,7 +1262,7 @@ def register_when_statement(condition: Union[list[Token], ExpressionTreeNode], s
     condition_value = evaluate_expression(built_condition, namespaces, async_statements, when_statement_watchers)
     execute_conditional(condition_value, statements_inside_scope, namespaces, when_statement_watchers)
     
-def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> Optional[Value]:
+def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> Optional[DreamberdValue]:
 
     # build a list of expressions that are modified to allow for the next keyword
     expressions_to_check: list[Union[list[Token], ExpressionTreeNode]] = []
@@ -1365,7 +1365,7 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
             instance_made = False
             class_name = statement.name
 
-            def class_object_closure(*args: Value) -> DreamberdObject:
+            def class_object_closure(*args: DreamberdValue) -> DreamberdObject:
                 nonlocal instance_made, class_namespace, class_name
                 if instance_made:
                     raise_error_at_line(filename, code, current_line, f"Already made instance of the class \"{class_name}\".")
@@ -1443,7 +1443,7 @@ def edit_current_line_number(statement: CodeStatement) -> None:
 
 # if a return statement is found, this will return the expression evaluated at the return. otherwise, it will return None
 # this is done to allow this function to be called when evaluating dreamberd functions
-def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> Optional[Value]:
+def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> Optional[DreamberdValue]:
 
     curr, direction = 0, 1
     while 0 <= curr < len(statements): 
@@ -1493,7 +1493,7 @@ def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], names
     
 # btw, reason async_statements and when_statements cannot be global is because they change depending on scope,
 # due to (possibly bad) design decisions, the name_watchers does not do this... :D
-def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _deleted_values: set[Value], _exported_names: list[tuple[str, str, Value]], _importable_names: dict[str, Value]):
+def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _deleted_values: set[DreamberdValue], _exported_names: list[tuple[str, str, DreamberdValue]], _importable_names: dict[str, DreamberdValue]):
     global filename, code, name_watchers, deleted_values, current_line, exported_names, importable_names  # screw bad practice, not like anyone's using this anyways
     filename = _filename 
     code = _code
