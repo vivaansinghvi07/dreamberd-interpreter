@@ -1,0 +1,6 @@
+var var god = [s,t,r,i,n,g]!
+print(god)!
+god[-0.5]=h!
+print(god)!
+print(~~)!
+print(god[0])!

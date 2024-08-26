@@ -6,10 +6,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
 from dreamberd.base import NonFormattedError
-#from base import NonFormattedError
-
 from dreamberd.processor.syntax_tree import CodeStatement
-#from processor.syntax_tree import CodeStatement
 
 __all__ = [
     'DreamberdFunction',
@@ -110,7 +107,7 @@ class BuiltinFunction(DreamberdValue):
 
 @dataclass 
 class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, DreamberdValue):
-    indexer = dict() # used for converting the front end decimal indecies to the backend ints  
+    indexer = dict() # used for converting the user decimal indecies to the real indecies  
     values: list[DreamberdValue]
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
@@ -133,9 +130,9 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
     def access_index(self, index: DreamberdValue) -> DreamberdValue:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a list with a non-number value.")
-        if not is_int(index.value):
-            raise NonFormattedError("Expected integer for list indexing.")
-        elif not -1 <= index.value <= len(self.values) - 2:
+        #if not is_int(index.value):
+        #    raise NonFormattedError("Expected integer for list indexing.")
+        if not -1 <= index.value <= len(self.values) - 2:
             raise NonFormattedError("Indexing out of list bounds.")
         elif index.value not in self.indexer:
             raise NonFormattedError("No value assigned to that index") # if inbounds index doesnt have assigned val
