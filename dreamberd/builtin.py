@@ -5,9 +5,11 @@ import math
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
-from dreamberd.base import NonFormattedError
+#from dreamberd.base import NonFormattedError
+from base import NonFormattedError
 
-from dreamberd.processor.syntax_tree import CodeStatement
+#from dreamberd.processor.syntax_tree import CodeStatement
+from processor.syntax_tree import CodeStatement
 
 __all__ = [
     'DreamberdFunction',
@@ -108,6 +110,7 @@ class BuiltinFunction(DreamberdValue):
 
 @dataclass 
 class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, DreamberdValue):
+    indexer = dict() # used for converting the front end decimal indecies to the backend ints  
     values: list[DreamberdValue]
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
@@ -134,7 +137,11 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
             raise NonFormattedError("Expected integer for list indexing.")
         elif not -1 <= index.value <= len(self.values) - 2:
             raise NonFormattedError("Indexing out of list bounds.")
-        return self.values[round(index.value) + 1]
+        elif index.value not in self.indexer:
+            raise NonFormattedError("No value assigned to that index") # if inbounds index doesnt have assigned val
+        userIndex = index.value
+        realIndex = self.indexer.get(userIndex)
+        return self.values[round(realIndex) + 1]
 
     def assign_index(self, index: DreamberdValue, val: DreamberdValue) -> None:
         if not isinstance(index, DreamberdNumber):
@@ -143,9 +150,11 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
             if not -1 <= index.value <= len(self.values) - 1:
                 raise NonFormattedError("Indexing out of list bounds.")
             self.values[round(index.value) + 1] = val
+            self.indexer[round(index.value) + 1] = round(index.value) + 1 # if adding to end, user index is real index
         else:  # assign in the middle of the array
             nearest_int_down = round(max((index.value + 2) // 1, 0))
             self.values[nearest_int_down:nearest_int_down] = [val]
+            self.indexer[index.value] = nearest_int_down # stores the key as the user index and the value as the real index
             self.create_namespace()
 
 @dataclass(unsafe_hash=True)
@@ -479,3 +488,7 @@ NUMBER_NAME_KEYWORDS = {
 
 KEYWORDS |= BUILTIN_FUNCTION_KEYWORDS | BUILTIN_VALUE_KEYWORDS | MATH_FUNCTION_KEYWORDS |\
             NUMBER_NAME_KEYWORDS
+
+# testing below
+valWow = DreamberdValue()
+listWow = DreamberdList(valWow)
