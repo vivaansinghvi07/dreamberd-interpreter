@@ -5,11 +5,11 @@ import math
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Union
-#from dreamberd.base import NonFormattedError
-from base import NonFormattedError
+from dreamberd.base import NonFormattedError
+#from base import NonFormattedError
 
-#from dreamberd.processor.syntax_tree import CodeStatement
-from processor.syntax_tree import CodeStatement
+from dreamberd.processor.syntax_tree import CodeStatement
+#from processor.syntax_tree import CodeStatement
 
 __all__ = [
     'DreamberdFunction',

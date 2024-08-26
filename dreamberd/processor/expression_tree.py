@@ -2,8 +2,8 @@ from __future__ import annotations
 from abc import ABCMeta, abstractmethod
 from typing import Optional
 
-#from dreamberd.base import STR_TO_OPERATOR, NonFormattedError, Token, TokenType, OperatorType, InterpretationError, raise_error_at_token
-from base import STR_TO_OPERATOR, NonFormattedError, Token, TokenType, OperatorType, InterpretationError
+from dreamberd.base import STR_TO_OPERATOR, NonFormattedError, Token, TokenType, OperatorType, InterpretationError, raise_error_at_token
+#from base import STR_TO_OPERATOR, NonFormattedError, Token, TokenType, OperatorType, InterpretationError
 class ExpressionTreeNode(metaclass=ABCMeta):
     @abstractmethod
     def to_string(self, tabs: int = 0) -> str: pass
