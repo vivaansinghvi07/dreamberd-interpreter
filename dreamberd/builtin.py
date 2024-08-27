@@ -34,8 +34,8 @@ def db_not(x: DreamberdBoolean) -> DreamberdBoolean:
     return DreamberdBoolean(not x.value)
 
 def db_list_push(self: DreamberdList, val: Value) -> None:
+    self.indexer[max(self.indexer.keys())+1] = len(self.values)-1
     self.values.append(val) 
-    self.indexer[len(self.values)-2] = len(self.values)-2
     self.create_namespace()  # update the length
 
 def db_list_pop(self: DreamberdList, index: Union[DreamberdNumber, DreamberdSpecialBlankValue]) -> Value:
@@ -53,7 +53,9 @@ def db_list_pop(self: DreamberdList, index: Union[DreamberdNumber, DreamberdSpec
 
 def db_str_push(self: DreamberdString, val: Value) -> None:
     val_str = db_to_string(val).value
+    self.indexer[max(self.indexer.keys())+1] = len(self.value)-1
     self.value += val_str 
+    #print(max(self.indexer.keys())+1)
     self.create_namespace()  # update the length
 
 def db_str_pop(self: DreamberdString, index: Union[DreamberdNumber, DreamberdSpecialBlankValue]) -> Value:
@@ -135,33 +137,30 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
     def access_index(self, index: Value) -> Value:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a list with a non-number value.")
-        #if not is_int(index.value):
-            #raise NonFormattedError("Expected integer for list indexing")
+        if not -1 <= index.value <= len(self.values) - 1:
+                raise NonFormattedError("Indexing out of list bounds.")
         elif index.value not in self.indexer:
             raise NonFormattedError("No value assigned to that index") # if inbounds index doesnt have assigned val
         userIndex = index.value
+        #print("user index:" + str(userIndex))
         realIndex = self.indexer.get(userIndex)
+        #print("real index:" + str(realIndex))
         return self.values[round(realIndex) + 1]
 
     def assign_index(self, index: Value, val: Value) -> None:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a list with a non-number value.")
-        #if is_int(index.value):
         if index.value in self.indexer:
             if not -1 <= index.value <= len(self.values) - 1:
                 raise NonFormattedError("Indexing out of list bounds.")
             self.values[round(index.value) + 1] = val
             self.indexer[round(index.value) + 1] = round(index.value) + 1 # if adding to end, user index is real index
-            #print("adding to start of array")
-            #print("user index: "+str(round(index.value) + 1))
-            #print("real index: "+str(round(index.value) + 1))
         else:  # assign in the middle of the array
+            if not -1 <= index.value <= len(self.values) - 1:
+                raise NonFormattedError("Indexing out of list bounds.")
             nearest_int_down = round(max((index.value + 2) // 1, 0))
             self.values[nearest_int_down:nearest_int_down] = [val]
             self.indexer[index.value] = nearest_int_down - 1 # if adding to end, user index is real index
-            #print("adding in middle of array")
-            #print("user index: "+str(index.value))
-            #print("real index: "+str(nearest_int_down - 1))
             self.create_namespace()
             # all real indexes after the inserted item need 1 to be added to them
             userIndicies = self.indexer.keys()
@@ -207,10 +206,14 @@ class DreamberdNumber(DreamberdIndexable, DreamberdMutable, Value):
 @dataclass(unsafe_hash=True)
 class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, Value):
     value: str = field(hash=True)
+    indexer: dict[float,int] = field(init = False,hash=False) # used for converting the user decimal indecies to the real indecies  
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict, hash=False)
 
     def __post_init__(self):
         self.create_namespace(False)
+        self.indexer = dict()
+        for index in range(len(self.value)):
+            self.indexer[index-1] = index-1
 
     def create_namespace(self, is_update: bool = True):
 
@@ -225,25 +228,39 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
     def access_index(self, index: Value) -> Value:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a string with a non-number value.")
-        if not is_int(index.value):
-            raise NonFormattedError("Expected integer for string indexing.")
-        elif not -1 <= index.value <= len(self.value) - 1:
+        #if not is_int(index.value):
+        #    raise NonFormattedError("Expected integer for string indexing.")
+        if not -1 <= index.value <= len(self.value) - 1:
             raise NonFormattedError("Indexing out of string bounds.")
-        return DreamberdString(self.value[round(index.value) + 1])
+        elif index.value not in self.indexer:
+            raise NonFormattedError("No value assigned to that index") # if inbounds index doesnt have assigned val
+        userIndex = index.value
+        #print("user index:" + str(userIndex))
+        realIndex = self.indexer.get(userIndex)
+        #print("real index:" + str(realIndex))
+        return self.value[realIndex+1]
+        #return DreamberdString(self.value[round(index.value) + 1])
 
     def assign_index(self, index: Value, val: Value) -> None:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a string with a non-number value.")
         val_str = db_to_string(val).value
-        if is_int(index.value):
+        if index.value in self.indexer:
+            index_num = self.indexer[index.value]+1
+            self.value = self.value[:index_num] + val_str + self.value[index_num + 1:]
+
+        else:  # assign in the middle of the array
             if not -1 <= index.value <= len(self.value) - 1:
                 raise NonFormattedError("Indexing out of string bounds.")
-            index_num = round(index.value) + 1
-            self.value = self.value[:index_num] + val_str + self.value[index_num + 1:]
-        else:  # assign in the middle of the array
             index_num = round(max((index.value + 2) // 1, 0))
             self.value = self.value[:index_num] + val_str + self.value[index_num:]
-        self.create_namespace()
+            self.indexer[index.value] = index_num -1
+            self.create_namespace()
+            userIndicies = self.indexer.keys()
+            for userIndex in userIndicies:
+                if userIndex > index.value:
+                    #print(f"updating user index {userIndex},{self.indexer[userIndex]}")
+                    self.indexer[userIndex] += 1    
 
 @dataclass 
 class DreamberdBoolean(Value):

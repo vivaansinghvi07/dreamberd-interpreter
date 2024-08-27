@@ -1,4 +1,4 @@
-var var what = [s,t,r,i,n,g]!
+var var what = "string"!
 print("starting array:")!
 print(what)!
 print("item at index 0:")!
