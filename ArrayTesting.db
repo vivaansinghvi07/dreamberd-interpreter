@@ -1,0 +1,32 @@
+var var what = [s,t,r,i,n,g]!
+print("starting array:")!
+print(what)!
+print("item at index 0:")!
+print(what[0])!
+print("~~")!
+print("adding 'h' to index -0.5:")!
+what[-0.5]=h!
+print("new array:")!
+print(what)!
+print("~~")!
+print("item at index 0:")!
+print(what[0])!
+print("item at -0.5:")!
+print(what[-0.5])!
+print("~~")!
+print("Overwriting item at -0.5:")!
+what[-0.5] = q!
+print("new array:")!
+print(what)!
+print("item at index -0.5:")!
+print(what[-0.5])!
+print("~~")!
+print("popping item from array:")!
+what.pop()!
+print(what)!
+print("~~")!
+print("pushing item to array:")!
+what.push(3)!
+print(what)!
+print("item at index 5:")!
+print(what[5])!
