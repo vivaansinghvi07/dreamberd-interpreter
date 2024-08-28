@@ -1,28 +1,11 @@
-var var what = "string"!
-print("starting array:")!
-print(what)!
-print("item at index 0:")!
-print(what[0])!
-print("~~")!
-print("adding 'h' to index -0.5:")!
-what[-0.5]=h!
-print("new array:")!
-print(what)!
-print("~~")!
-print("item at index 0:")!
-print(what[0])!
-print("item at -0.5:")!
-print(what[-0.5])!
-print("~~")!
-print("Overwriting item at -0.5:")!
-what[-0.5] = q!
-print("new array:")!
-print(what)!
-print("item at index -0.5:")!
-print(what[-0.5])!
-print("~~")!
-print("pushing item to array:")!
-what.push(3)!
-print(what)!
-print("item at index 5:")!
-print(what[5])!
+var var s = abcdef!
+print(s)!
+s[0.5] = 123!
+print(s)!
+print(s[-1])!
+print(s[0])!
+print s[0.5]!
+print s[1]!
+print s[2]!
+print s[3]!
+print s[4]!

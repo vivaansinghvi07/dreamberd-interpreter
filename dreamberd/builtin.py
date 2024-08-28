@@ -33,12 +33,12 @@ def db_not(x: DreamberdBoolean) -> DreamberdBoolean:
         return DreamberdBoolean(None)
     return DreamberdBoolean(not x.value)
 
-def db_list_push(self: DreamberdList, val: Value) -> None:
+def db_list_push(self: DreamberdList, val: DreamberdValue) -> None:
     self.indexer[max(self.indexer.keys())+1] = len(self.values)-1
     self.values.append(val) 
     self.create_namespace()  # update the length
 
-def db_list_pop(self: DreamberdList, index: Union[DreamberdNumber, DreamberdSpecialBlankValue]) -> Value:
+def db_list_pop(self: DreamberdList, index: Union[DreamberdNumber, DreamberdSpecialBlankValue]) -> DreamberdValue:
     if isinstance(index, DreamberdSpecialBlankValue):
         retval = self.values.pop()
         self.create_namespace()
@@ -51,14 +51,14 @@ def db_list_pop(self: DreamberdList, index: Union[DreamberdNumber, DreamberdSpec
     self.create_namespace()
     return retval
 
-def db_str_push(self: DreamberdString, val: Value) -> None:
+def db_str_push(self: DreamberdString, val: DreamberdValue) -> None:
     val_str = db_to_string(val).value
     self.indexer[max(self.indexer.keys())+1] = len(self.value)-1
     self.value += val_str 
     #print(max(self.indexer.keys())+1)
     self.create_namespace()  # update the length
 
-def db_str_pop(self: DreamberdString, index: Union[DreamberdNumber, DreamberdSpecialBlankValue]) -> Value:
+def db_str_pop(self: DreamberdString, index: Union[DreamberdNumber, DreamberdSpecialBlankValue]) -> DreamberdValue:
     if isinstance(index, DreamberdSpecialBlankValue):
         retval = self.value[-1]
         self.value = self.value[:-1]
@@ -80,38 +80,38 @@ def db_str_pop(self: DreamberdString, index: Union[DreamberdNumber, DreamberdSpe
 #     @abstractmethod 
 #     def to_str(self) -> Value: pass
 
-class Value():  # base class for shit  
+class DreamberdValue():  # base class for shit  
     pass
 
-class DreamberdMutable(Value):  # mutable values
+class DreamberdMutable(DreamberdValue):  # mutable values
     pass
 
-class DreamberdIndexable(Value, metaclass=ABCMeta):
+class DreamberdIndexable(DreamberdValue, metaclass=ABCMeta):
     
     @abstractmethod 
-    def access_index(self, index: Value) -> Value: pass
+    def access_index(self, index: DreamberdValue) -> DreamberdValue: pass
 
     @abstractmethod
-    def assign_index(self, index: Value, val: Value) -> None: pass
+    def assign_index(self, index: DreamberdValue, val: DreamberdValue) -> None: pass
 
-class DreamberdNamespaceable(Value, metaclass=ABCMeta):
+class DreamberdNamespaceable(DreamberdValue, metaclass=ABCMeta):
     namespace: dict[str, Union[Name, Variable]]
 
 @dataclass 
-class DreamberdFunction(Value):  
+class DreamberdFunction(DreamberdValue):  
     args: list[str]
     code: list[tuple[CodeStatement, ...]]
     is_async: bool
 
 @dataclass
-class BuiltinFunction(Value):
+class BuiltinFunction(DreamberdValue):
     arg_count: int
     function: Callable
     modifies_caller: bool = False
 
 @dataclass 
-class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, Value):
-    values: list[Value]
+class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, DreamberdValue):
+    values: list[DreamberdValue]
     indexer: dict[float,int] = field(init = False) # used for converting the user decimal indecies to the real indecies  
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
@@ -134,7 +134,7 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
                 'length': Name('length', DreamberdNumber(len(self.values))),
             }
 
-    def access_index(self, index: Value) -> Value:
+    def access_index(self, index: DreamberdValue) -> DreamberdValue:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a list with a non-number value.")
         if not -1 <= index.value <= len(self.values) - 1:
@@ -147,7 +147,7 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
         #print("real index:" + str(realIndex))
         return self.values[round(realIndex) + 1]
 
-    def assign_index(self, index: Value, val: Value) -> None:
+    def assign_index(self, index: DreamberdValue, val: DreamberdValue) -> None:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a list with a non-number value.")
         if index.value in self.indexer:
@@ -169,13 +169,13 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
                     self.indexer[userIndex] += 1
 
 @dataclass(unsafe_hash=True)
-class DreamberdNumber(DreamberdIndexable, DreamberdMutable, Value):
+class DreamberdNumber(DreamberdIndexable, DreamberdMutable, DreamberdValue):
     value: Union[int, float]
 
     def _get_self_str(self) -> str:
         return str(self.value).replace('.', '').replace('-', '')
 
-    def access_index(self, index: Value) -> Value:
+    def access_index(self, index: DreamberdValue) -> DreamberdValue:
         self_val_str = self._get_self_str()
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a number with a non-number value.")
@@ -185,7 +185,7 @@ class DreamberdNumber(DreamberdIndexable, DreamberdMutable, Value):
             raise NonFormattedError("Indexing out of number bounds.")
         return DreamberdNumber(int(self_val_str[round(index.value) + 1]))
 
-    def assign_index(self, index: Value, val: Value) -> None:
+    def assign_index(self, index: DreamberdValue, val: DreamberdValue) -> None:
         self_val_str = self._get_self_str()
         sign = self.value / abs(self.value)
         if not is_int(self.value):
@@ -204,7 +204,7 @@ class DreamberdNumber(DreamberdIndexable, DreamberdMutable, Value):
             self.value = sign * int(self_val_str[:index_num] + str(round(val.value)) + self_val_str[index_num:])
 
 @dataclass(unsafe_hash=True)
-class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, Value):
+class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable, DreamberdValue):
     value: str = field(hash=True)
     indexer: dict[float,int] = field(init = False,hash=False) # used for converting the user decimal indecies to the real indecies  
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict, hash=False)
@@ -225,7 +225,7 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
         else:
             self.namespace['length'] = Name('length', DreamberdNumber(len(self.value)))
 
-    def access_index(self, index: Value) -> Value:
+    def access_index(self, index: DreamberdValue) -> DreamberdValue:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a string with a non-number value.")
         #if not is_int(index.value):
@@ -241,7 +241,7 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
         return self.value[realIndex+1]
         #return DreamberdString(self.value[round(index.value) + 1])
 
-    def assign_index(self, index: Value, val: Value) -> None:
+    def assign_index(self, index: DreamberdValue, val: DreamberdValue) -> None:
         if not isinstance(index, DreamberdNumber):
             raise NonFormattedError("Cannot index a string with a non-number value.")
         val_str = db_to_string(val).value
@@ -263,51 +263,51 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
                     self.indexer[userIndex] += 1    
 
 @dataclass 
-class DreamberdBoolean(Value):
+class DreamberdBoolean(DreamberdValue):
     value: Optional[bool]  # none represents maybe?
 
 @dataclass 
-class DreamberdUndefined(Value):
+class DreamberdUndefined(DreamberdValue):
     pass
 @dataclass 
-class DreamberdSpecialBlankValue(Value):
+class DreamberdSpecialBlankValue(DreamberdValue):
     pass
 
 @dataclass 
-class DreamberdObject(DreamberdNamespaceable, Value):
+class DreamberdObject(DreamberdNamespaceable, DreamberdValue):
     class_name: str
     namespace: dict[str, Union[Name, Variable]] = field(default_factory=dict)
 
 @dataclass 
-class DreamberdMap(DreamberdIndexable, Value):
-    self_dict: dict[Union[int, float, str], Value]
+class DreamberdMap(DreamberdIndexable, DreamberdValue):
+    self_dict: dict[Union[int, float, str], DreamberdValue]
 
-    def access_index(self, index: Value) -> Value:
+    def access_index(self, index: DreamberdValue) -> DreamberdValue:
         if not isinstance(index, (DreamberdString, DreamberdNumber)):
             raise NonFormattedError("Keys of a map must be an index or a number.")
         return self.self_dict[index.value]
 
-    def assign_index(self, index: Value, val: Value) -> None:
+    def assign_index(self, index: DreamberdValue, val: DreamberdValue) -> None:
         if not isinstance(index, (DreamberdString, DreamberdNumber)):
             raise NonFormattedError("Keys of a map must be an index or a number.")
         self.self_dict[index.value] = val
 
 @dataclass 
-class DreamberdKeyword(Value):
+class DreamberdKeyword(DreamberdValue):
     value: str
 
 @dataclass 
-class DreamberdPromise(Value):
-    value: Optional[Value]
+class DreamberdPromise(DreamberdValue):
+    value: Optional[DreamberdValue]
 
 @dataclass
 class Name:
     name: str
-    value: Value
+    value: DreamberdValue
 
 @dataclass 
 class VariableLifetime:
-    value: Value
+    value: DreamberdValue
     lines_left: int 
     confidence: int
     can_be_reset: bool
@@ -317,7 +317,7 @@ class VariableLifetime:
 class Variable:
     name: str 
     lifetimes: list[VariableLifetime]
-    prev_values: list[Value]
+    prev_values: list[DreamberdValue]
 
     @property 
     def can_be_reset(self) -> bool:
@@ -331,7 +331,7 @@ class Variable:
             return self.lifetimes[0].can_edit_value
         raise NonFormattedError("Variable is undefined.")
 
-    def add_lifetime(self, value: Value, confidence: int, duration: int, can_be_reset: bool, can_edit_value: bool) -> None:
+    def add_lifetime(self, value: DreamberdValue, confidence: int, duration: int, can_be_reset: bool, can_edit_value: bool) -> None:
         for i in range(len(self.lifetimes) + 1):
             if i == len(self.lifetimes) or self.lifetimes[i].confidence == confidence:
                 if i == 0:
@@ -348,7 +348,7 @@ class Variable:
             del self.lifetimes[i]
 
     @property
-    def value(self) -> Value:
+    def value(self) -> DreamberdValue:
         if self.lifetimes:
             return self.lifetimes[0].value
         raise NonFormattedError("Variable is undefined.")
@@ -379,13 +379,13 @@ KEYWORDS = {kw: Name(kw, DreamberdKeyword(kw)) for kw in
 ############################################
 
 # this is for functions that return the same value, like current or new
-def db_identity(val: Value) -> Value:
+def db_identity(val: DreamberdValue) -> DreamberdValue:
     return val
 
 def db_map() -> DreamberdMap:
     return DreamberdMap({})
 
-def db_to_boolean(val: Value) -> DreamberdBoolean:
+def db_to_boolean(val: DreamberdValue) -> DreamberdBoolean:
     return_bool = None
     match val: 
         case DreamberdString():
@@ -404,7 +404,7 @@ def db_to_boolean(val: Value) -> DreamberdBoolean:
             return_bool = None  # maybe for these cause im mischevious
     return DreamberdBoolean(return_bool)
 
-def db_to_string(val: Value) -> DreamberdString:
+def db_to_string(val: DreamberdValue) -> DreamberdString:
     return_string = str(val)
     match val:
         case DreamberdString():
@@ -428,10 +428,10 @@ def db_to_string(val: Value) -> DreamberdString:
             return_string = f'{{{", ".join([f"{k}: {db_to_string(v).value}" for k, v in val.self_dict.items()])}}}'
     return DreamberdString(return_string)
 
-def db_print(*vals: Value) -> None:
+def db_print(*vals: DreamberdValue) -> None:
     print(*[db_to_string(v).value for v in vals])
 
-def db_to_number(val: Value) -> DreamberdNumber:
+def db_to_number(val: DreamberdValue) -> DreamberdNumber:
     return_number = 0
     match val:
         case DreamberdNumber():
@@ -454,9 +454,9 @@ def db_to_number(val: Value) -> DreamberdNumber:
             raise NonFormattedError(f"Cannot turn type {type(val).__name__} into a number.")
     return DreamberdNumber(return_number)
 
-def db_signal(starting_value: Value) -> Value:
+def db_signal(starting_value: DreamberdValue) -> DreamberdValue:
     obj = Name('', starting_value)
-    def signal_func(setter_val: Value) -> Optional[Value]:
+    def signal_func(setter_val: DreamberdValue) -> Optional[DreamberdValue]:
         nonlocal obj
         if isinstance(setter_val, DreamberdSpecialBlankValue):
             return obj.value
