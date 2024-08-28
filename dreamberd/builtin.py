@@ -53,7 +53,11 @@ def db_list_pop(self: DreamberdList, index: Union[DreamberdNumber, DreamberdSpec
 
 def db_str_push(self: DreamberdString, val: DreamberdValue) -> None:
     val_str = db_to_string(val).value
-    self.indexer[max(self.indexer.keys())+1] = len(self.value)-1
+    max_user_index = max(self.indexer.keys())
+    if len(val_str)>1:
+        self.indexer[max_user_index+1] = (len(self.value)-1,val_str[1:])
+    else:
+        self.indexer[max_user_index+1] = (len(self.value)-1,"")
     self.value += val_str 
     #print(max(self.indexer.keys())+1)
     self.create_namespace()  # update the length
