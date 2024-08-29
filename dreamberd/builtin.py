@@ -277,7 +277,6 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
             else:
                 indexer_data = (index_num -1, "")
             self.indexer[index.value] = indexer_data
-            self.create_namespace()
             user_indicies = self.indexer.keys()
             for user_index in user_indicies:
                 if user_index > index.value:
@@ -285,6 +284,7 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
                     indexer_data = self.indexer[user_index]
                     indexer_data = (indexer_data[0]+len(val_str),indexer_data[1])
                     self.indexer[user_index] = indexer_data
+            self.create_namespace()
 
 @dataclass 
 class DreamberdBoolean(DreamberdValue):
