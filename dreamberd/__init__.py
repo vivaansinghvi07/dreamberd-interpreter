@@ -55,6 +55,11 @@ def run_repl() -> None:
             code, tokens = __get_next_repl_input()
             statements = generate_syntax_tree(__REPL_FILENAME, tokens, code)
             interpret_code_statements(statements, namespaces, async_statements, when_statement_watchers)
+        except EOFError:
+            print()
+            exit()
+        except KeyboardInterrupt:
+            print()
         except InterpretationError as e:
             print(e)
         except NonFormattedError as e:
