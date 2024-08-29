@@ -221,7 +221,6 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
             self.indexer[index-1] = (index-1,"")
 
     def create_namespace(self, is_update: bool = True):
-
         if not is_update:
             self.namespace |= {
                 'push': Name('push', BuiltinFunction(2, db_str_push, True)),
@@ -250,14 +249,24 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
             raise NonFormattedError("Cannot index a string with a non-number value.")
         val_str = db_to_string(val).value
         if index.value in self.indexer:
-            index_num = self.indexer[index.value]+1
-            self.value = self.value[:index_num] + val_str[0] + self.value[index_num + 1:]
+            ## add, when modifying, reduce user indexes by the length of the replaced index's extra characters
             indexer_data = self.indexer[index.value]
+            index_num = indexer_data[0]+1
+            excess_length = len(indexer_data[1])
+            self.value = self.value[:index_num] + val_str + self.value[index_num + excess_length + 1:]
             if len(val_str)>1:
                 indexer_data = (indexer_data[0],val_str[:-1])
             else:
                 indexer_data = (indexer_data[0],"")
             self.indexer[index.value] = indexer_data
+            user_indicies = self.indexer.keys()
+            for user_index in user_indicies:
+                if user_index > index.value:
+                    indexer_data = self.indexer[user_index]
+                    indexer_data = (indexer_data[0]-excess_length,indexer_data[1])
+                    self.indexer[user_index] = indexer_data
+            self.create_namespace();
+
         else:  # assign in the middle of the array
             if not -1 <= index.value <= len(self.value) - 1:
                 raise NonFormattedError("Indexing out of string bounds.")
@@ -270,13 +279,12 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
             self.indexer[index.value] = indexer_data
             self.create_namespace()
             user_indicies = self.indexer.keys()
-            for x in range(len(val_str)):
-                for user_index in user_indicies:
-                    if user_index > index.value:
-                        #print(f"updating user index {user_index},{self.indexer[user_index]}")
-                        indexer_data = self.indexer[user_index]
-                        indexer_data = (indexer_data[0]+1,indexer_data[1])
-                        self.indexer[user_index] = indexer_data
+            for user_index in user_indicies:
+                if user_index > index.value:
+                    #print(f"updating user index {user_index},{self.indexer[user_index]}")
+                    indexer_data = self.indexer[user_index]
+                    indexer_data = (indexer_data[0]+len(val_str),indexer_data[1])
+                    self.indexer[user_index] = indexer_data
 
 @dataclass 
 class DreamberdBoolean(DreamberdValue):
