@@ -122,7 +122,7 @@ class DreamberdList(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutable
     def __post_init__(self):
         self.create_namespace(False)
         self.indexer = dict()
-        for index in range(len(self.values)):
+        for index in range(-1, len(self.values)-1):
             self.indexer[index] = index
 
     def create_namespace(self, is_update: bool = True) -> None:
