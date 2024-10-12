@@ -67,7 +67,7 @@ def run_repl() -> None:
             
 def run_file(main_filename: str) -> None:  # idk what else to call this
 
-    with open(main_filename, 'r') as f:
+    with open(main_filename, 'r', encoding="UTF-8") as f:
         code_lines = f.readlines()
 
     # split up into seperate 'files' by finding which lines start with multiple equal signs
