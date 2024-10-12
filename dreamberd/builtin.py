@@ -224,6 +224,7 @@ class DreamberdString(DreamberdIndexable, DreamberdNamespaceable, DreamberdMutab
         if not is_update:
             self.namespace |= {
                 'push': Name('push', BuiltinFunction(2, db_str_push, True)),
+                'pop': Name('pop', BuiltinFunction(2, db_str_pop, True)),
                 'length': Name('length', DreamberdNumber(len(self.value))),
             }
         else:
