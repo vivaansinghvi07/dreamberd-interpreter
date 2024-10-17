@@ -8,6 +8,7 @@
 from __future__ import annotations
 import os
 import re
+import dataclasses
 import json
 import locale
 import random
@@ -869,7 +870,10 @@ def handle_next_expressions(expr: ExpressionTreeNode, namespaces: list[Namespace
                     last_name = name.split('.')[-1]
                     normal_nexts.add((name, id(ns)))
                     expr = expr.args[0]
-                    expr.name_or_value.value = get_modified_next_name(last_name, id(ns))
+                    expr.name_or_value = dataclasses.replace(
+                        expr.name_or_value,
+                        value=get_modified_next_name(last_name, id(ns)),
+                    )
 
                 elif is_await:
 
@@ -891,7 +895,10 @@ def handle_next_expressions(expr: ExpressionTreeNode, namespaces: list[Namespace
                         last_name = name.split('.')[-1]
                         async_nexts.add(name)  # only need to store the name for the async ones because we are going to wait anyways
                         expr = inner_expr.args[0]
-                        expr.name_or_value.value = get_modified_next_name(last_name, id(ns))
+                    expr.name_or_value = dataclasses.replace(
+                        expr.name_or_value,
+                        value=get_modified_next_name(last_name, id(ns)),
+                    )
 
             else:
                 replacement_args = []
@@ -1171,7 +1178,7 @@ def execute_after_statement(event: DreamberdValue, statements_inside_scope: list
                         interpret_code_statements(statements_inside_scope, namespaces + [{'event': Name('event', get_mouse_event_object(x, y, button, event.value))}], [], when_statement_watchers + [{}])
                     del mouse_buttons[button]
             listener = mouse.Listener(on_click=listener_func)  # type: ignore
- 
+
         case "mousedown":
             def listener_func(x: int, y: int, button: mouse.Button, pressed: bool):
                 nonlocal namespaces, statements_inside_scope
@@ -1263,7 +1270,22 @@ def register_when_statement(condition: Union[list[Token], ExpressionTreeNode], s
     execute_conditional(condition_value, statements_inside_scope, namespaces, when_statement_watchers)
     
 def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers) -> Optional[DreamberdValue]:
-
+    # Save for later restoration
+    old_expression = None
+    old_indixes = None
+    match statement:
+        case VariableAssignment():
+            old_expression = statement.expression
+            old_indixes = statement.indexes
+        case (
+            VariableDeclaration()
+            | Conditional()
+            | AfterStatement()
+            | ExpressionStatement()
+        ):
+            old_expression = statement.expression
+        case CodeStatement():
+            pass
     # build a list of expressions that are modified to allow for the next keyword
     expressions_to_check: list[Union[list[Token], ExpressionTreeNode]] = []
     match statement:
@@ -1383,7 +1405,19 @@ def interpret_statement(statement: CodeStatement, namespaces: list[Namespace], a
                 return obj
 
             namespaces[-1][statement.name.value] = Name(statement.name.value, BuiltinFunction(-1, class_object_closure))
-
+    match statement:
+        case VariableAssignment():
+            statement.expression = old_expression  # pyright: ignore[reportAttributeAccessIssue]
+            statement.indexes = old_indixes  # pyright: ignore[reportAttributeAccessIssue]
+        case (
+            VariableDeclaration()
+            | Conditional()
+            | AfterStatement()
+            | ExpressionStatement()
+        ):
+            statement.expression = old_expression  # pyright: ignore[reportAttributeAccessIssue]
+        case CodeStatement():
+            pass
     clear_temp_namespace(namespaces, prev_namespace)
     return retval
 
