@@ -8,6 +8,7 @@
 from __future__ import annotations
 import os
 import re
+import sys
 import json
 import locale
 import random
@@ -1035,7 +1036,8 @@ def adjust_for_normal_nexts(statement: CodeStatementWithExpression, async_nexts:
     # for each async one, wait until each one is different
     for name, start_len in zip(async_nexts, old_async_vals): 
         curr_len = get_state_watcher(get_name_from_namespaces(name, namespaces))
-        while start_len != curr_len:  
+        while start_len != curr_len:
+            exit_on_dead_listener()
             curr_len = get_state_watcher(get_name_from_namespaces(name, namespaces))
 
     # now, build a namespace for each one
@@ -1083,7 +1085,8 @@ def wait_for_async_nexts(async_nexts: set[str], namespaces: list[Namespace]) -> 
     # for each async one, wait until each one is different
     for name, start_len in zip(async_nexts, old_async_vals): 
         curr_len = get_state_watcher(get_name_from_namespaces(name, namespaces))
-        while start_len != curr_len:  
+        while start_len != curr_len:
+            exit_on_dead_listener()
             curr_len = get_state_watcher(get_name_from_namespaces(name, namespaces))
 
     # now, build a namespace for each one
@@ -1217,6 +1220,7 @@ def execute_after_statement(event: DreamberdValue, statements_inside_scope: list
             raise_error_at_line(filename, code, current_line, f"Invalid event for the \"after\" statement: \"{db_to_string(event)}\"")
 
     listener.start()
+    after_listeners.append(listener)  # pyright: ignore[reportUnknownMemberType]
 
 def gather_names_or_values(expr: ExpressionTreeNode) -> set[Token]:
     names: set[Token] = set()
@@ -1490,11 +1494,12 @@ def interpret_code_statements(statements: list[tuple[CodeStatement, ...]], names
                 async_direction = -async_direction
             async_statements[i] = (async_st, async_ns, line_num + async_direction, async_direction)  # messy but works
             interpret_statement(statement, async_ns, async_statements, when_statement_watchers)
+        exit_on_dead_listener()
     
 # btw, reason async_statements and when_statements cannot be global is because they change depending on scope,
 # due to (possibly bad) design decisions, the name_watchers does not do this... :D
 def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _deleted_values: set[DreamberdValue], _exported_names: list[tuple[str, str, DreamberdValue]], _importable_names: dict[str, DreamberdValue]):
-    global filename, code, name_watchers, deleted_values, current_line, exported_names, importable_names  # screw bad practice, not like anyone's using this anyways
+    global filename, code, name_watchers, deleted_values, current_line, exported_names, importable_names, after_listeners  # screw bad practice, not like anyone's using this anyways
     filename = _filename 
     code = _code
     name_watchers = _name_watchers 
@@ -1502,9 +1507,17 @@ def load_globals(_filename: str, _code: str, _name_watchers: NameWatchers, _dele
     exported_names = _exported_names
     importable_names = _importable_names
     current_line = 1
+    after_listeners = []
     
 def interpret_code_statements_main_wrapper(statements: list[tuple[CodeStatement, ...]], namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
     try:
         interpret_code_statements(statements, namespaces, async_statements, when_statement_watchers)
     except NonFormattedError as e:
         raise_error_at_line(filename, code, current_line, str(e))
+
+def exit_on_dead_listener() -> None:
+    """If any listener is dead, this means that it hit a `exit` call.
+    But this exit call should exit the entire program.
+    """
+    if not all(listener.is_alive() for listener in after_listeners):  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType, reportUnknownVariableType]
+        sys.exit()
