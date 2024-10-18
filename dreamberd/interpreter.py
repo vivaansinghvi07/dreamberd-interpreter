@@ -302,6 +302,10 @@ def assign_variable(statement: VariableAssignment, indexes: list[DreamberdValue]
                 raise_error_at_line(filename, code, name_token.line, "Attempted to index into an un-indexable object.")
             index = remaining_indexes.pop(0) 
 
+            if not remaining_indexes:  # perform actual assignment here
+                value_to_modify.assign_index(index, new_value)
+            else:
+                assign_variable_helper(value_to_modify.access_index(index), remaining_indexes)
             # check for some watchers here too!!!!!!!!!!!
             when_watchers = get_code_from_when_statement_watchers(id(value_to_modify), when_statement_watchers)
             for when_watcher in when_watchers:  # i just wanna be done with this :(
@@ -311,11 +315,6 @@ def assign_variable(statement: VariableAssignment, indexes: list[DreamberdValue]
                 condition_val = evaluate_expression(condition, namespaces, async_statements, when_statement_watchers)
                 execute_conditional(condition_val, inside_statements, namespaces, when_statement_watchers)
                 visited_whens.append(when_watcher)
-
-            if not remaining_indexes:  # perform actual assignment here
-                value_to_modify.assign_index(index, new_value)
-            else:
-                assign_variable_helper(value_to_modify.access_index(index), remaining_indexes)
 
         if isinstance(var, Variable) and not var.can_edit_value:
             raise_error_at_token(filename, code, "Cannot edit the value of this variable.", name_token)
