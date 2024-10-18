@@ -358,7 +358,7 @@ class Variable:
 
     def add_lifetime(self, value: DreamberdValue, confidence: int, duration: int, can_be_reset: bool, can_edit_value: bool) -> None:
         for i in range(len(self.lifetimes) + 1):
-            if i == len(self.lifetimes) or self.lifetimes[i].confidence == confidence:
+            if i == len(self.lifetimes) or self.lifetimes[i].confidence >= confidence:
                 if i == 0:
                     self.prev_values.append(self.value)
                 self.lifetimes[i:i] = [VariableLifetime(value, duration, confidence, can_be_reset, can_edit_value)]
