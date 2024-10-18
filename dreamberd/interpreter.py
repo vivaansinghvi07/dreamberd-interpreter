@@ -1035,7 +1035,7 @@ def adjust_for_normal_nexts(statement: CodeStatementWithExpression, async_nexts:
     # for each async one, wait until each one is different
     for name, start_len in zip(async_nexts, old_async_vals): 
         curr_len = get_state_watcher(get_name_from_namespaces(name, namespaces))
-        while start_len != curr_len:
+        while start_len == curr_len:  
             exit_on_dead_listener()
             curr_len = get_state_watcher(get_name_from_namespaces(name, namespaces))
 
@@ -1084,7 +1084,7 @@ def wait_for_async_nexts(async_nexts: set[str], namespaces: list[Namespace]) -> 
     # for each async one, wait until each one is different
     for name, start_len in zip(async_nexts, old_async_vals): 
         curr_len = get_state_watcher(get_name_from_namespaces(name, namespaces))
-        while start_len != curr_len:
+        while start_len == curr_len:  
             exit_on_dead_listener()
             curr_len = get_state_watcher(get_name_from_namespaces(name, namespaces))
 
@@ -1095,12 +1095,7 @@ def wait_for_async_nexts(async_nexts: set[str], namespaces: list[Namespace]) -> 
         if not v or not ns or (old_len is not None and not isinstance(v, Variable)):
             raise_error_at_line(filename, code, current_line, "Something went wrong with accessing the next value of a variable.") 
         mod_name = get_modified_next_name(name, id(ns))
-        match old_len:
-            case None: new_namespace[mod_name] = Name(mod_name, v.value if isinstance(v, Name) else v.prev_values[0])
-            case i:
-                if not isinstance(v, Variable):
-                    raise_error_at_line(filename, code, current_line, "Something went wrong.")
-                new_namespace[mod_name] = Name(mod_name, v.prev_values[i])
+        new_namespace[mod_name] = Name(mod_name, v.value)
     return new_namespace
 
 def interpret_name_watching_statement(statement: CodeStatementWithExpression, namespaces: list[Namespace], promise: Optional[DreamberdPromise], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers): 
