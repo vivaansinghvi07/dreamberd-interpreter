@@ -238,7 +238,6 @@ def declare_new_variable(statement: VariableDeclaration, value: DreamberdValue, 
     if is_global:
         open_global_variable_issue(name, value, confidence)
 
-    # if we're dealing with seconds just sleep in another thread and remove the variable lifetime
     if lifetime == "Infinity":
         # if len(namespaces) == 1: continue  # only save global vars if they are in the global scope
 
@@ -254,16 +253,22 @@ def declare_new_variable(statement: VariableDeclaration, value: DreamberdValue, 
             f.write(f"{name}{SEP}{generated_addr}{SEP}{can_be_reset}{SEP}{can_edit_value}{SEP}{confidence}\n")
         with open(dir_path/INF_VAR_VALUES_PATH/str(generated_addr), "wb") as f:
             pickle.dump(value, f)
-            
     elif is_lifetime_temporal:
-        def remove_lifetime(lifetime: str, target_var: Variable, target_lifetime: VariableLifetime, error_line: int):
-            if lifetime[-1] not in ['s', 'm'] or not all(c.isdigit() for c in lifetime[:-1]):
-                raise_error_at_line(filename, code, error_line, "Invalid time unit for variable lifetime.")
-            sleep(int(lifetime[:-1]) if lifetime[-1] == 's' else int(lifetime[:-1] * 60))
+        # if we're dealing with seconds just sleep in another thread and remove the variable lifetime
+        unit: str = lifetime[-1]
+        if unit not in ['s', 'm']:
+            raise_error_at_line(filename, code, current_line, "Invalid time unit for variable lifetime.")
+        try:
+            value: float = float(lifetime[:-1])
+        except ValueError as err:
+            raise_error_at_line(filename, code, current_line, f"Lifetime is not a valid number: {err}")
+
+        def remove_lifetime(sleep_seconds: float, target_var: Variable, target_lifetime: VariableLifetime):
+            sleep(sleep_seconds)
             for i, lt in reversed([*enumerate(target_var.lifetimes)]):
                 if lt is target_lifetime:
                     del target_var.lifetimes[i]
-        Thread(target=remove_lifetime, args=(lifetime, target_var, target_lifetime, current_line)).start()
+        Thread(target=remove_lifetime, args=(value * (1 if unit == 's' else 60), target_var, target_lifetime)).start()
 
 def assign_variable(statement: VariableAssignment, indexes: list[DreamberdValue], new_value: DreamberdValue, namespaces: list[Namespace], async_statements: AsyncStatements, when_statement_watchers: WhenStatementWatchers):
     name, confidence, debug = statement.name.value, statement.confidence, statement.debug
