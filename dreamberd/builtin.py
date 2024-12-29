@@ -1,5 +1,6 @@
 from __future__ import annotations
 import functools
+from time import sleep
 
 import math
 from abc import ABCMeta, abstractmethod
@@ -488,6 +489,11 @@ def db_signal(starting_value: DreamberdValue) -> DreamberdValue:
         obj.value = setter_val
     return BuiltinFunction(1, signal_func)
 
+def db_sleep(t: DreamberdNumber) -> None:
+    if not isinstance(t, DreamberdNumber):
+        raise NonFormattedError("'sleep' function requires numerical input.")
+    sleep(t.value)
+
 def db_exit() -> None:
     exit()
 
@@ -524,7 +530,8 @@ BUILTIN_FUNCTION_KEYWORDS = {
     "print": Name("print", BuiltinFunction(-1, db_print)),
     "exit": Name("exit", BuiltinFunction(0, db_exit)),
     "Number": Name("Number", BuiltinFunction(1, db_to_number)),
-    "use": Name("use", BuiltinFunction(1, db_signal))
+    "use": Name("use", BuiltinFunction(1, db_signal)),
+    "sleep": Name("sleep", BuiltinFunction(1, db_sleep)),
 }
 BUILTIN_VALUE_KEYWORDS = {
     "true": Name("true", DreamberdBoolean(True)),
