@@ -494,6 +494,14 @@ def db_sleep(t: DreamberdNumber) -> None:
         raise NonFormattedError("'sleep' function requires numerical input.")
     sleep(t.value)
 
+def db_read(path: DreamberdString) -> DreamberdString:
+    with open(path.value) as f: s = f.read()
+    return DreamberdString(s)
+
+def db_write(path: DreamberdString, content: DreamberdValue) -> None:
+    content = db_to_string(content).value
+    with open(path.value, "w") as f: f.write(content)
+
 def db_exit() -> None:
     exit()
 
@@ -532,6 +540,8 @@ BUILTIN_FUNCTION_KEYWORDS = {
     "Number": Name("Number", BuiltinFunction(1, db_to_number)),
     "use": Name("use", BuiltinFunction(1, db_signal)),
     "sleep": Name("sleep", BuiltinFunction(1, db_sleep)),
+    "read": Name("read", BuiltinFunction(-1, db_read)),
+    "write": Name("write", BuiltinFunction(-1, db_write)),
 }
 BUILTIN_VALUE_KEYWORDS = {
     "true": Name("true", DreamberdBoolean(True)),
