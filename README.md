@@ -44,7 +44,7 @@ options:
 
 The goal of this project is to implement every feature from the DreamBerd language. A list of features is in the README file of the project, linked [here](https://github.com/TodePond/DreamBerd---e-acc). Here is a working list of features that there is no chance I will implement (new features may be added - or I should say, removed - as I work on this project and realize I'm too stupid to implement them):
 
-- DB3X: I am not going to even try to parse XML AND parse DB code.
+- DB4X: I am not going to even try to parse XML AND parse DB code.
 - Regex: Since type hints seem to not even do anything there is no point in implementing a Regex parser. 
 - "Variable Hoisting" (being able to declare variables with a negative lifetime): Given the fact that keywords can be renamed and reassigned in this language, it does not make sense to implement this as the following breaks:
 
