@@ -489,18 +489,22 @@ def db_signal(starting_value: DreamberdValue) -> DreamberdValue:
         obj.value = setter_val
     return BuiltinFunction(1, signal_func)
 
-def db_sleep(t: DreamberdNumber) -> None:
+def db_sleep(t: DreamberdValue) -> None:
     if not isinstance(t, DreamberdNumber):
         raise NonFormattedError("'sleep' function requires numerical input.")
     sleep(t.value)
 
-def db_read(path: DreamberdString) -> DreamberdString:
+def db_read(path: DreamberdValue) -> DreamberdString:
+    if not isinstance(path, DreamberdString):
+        raise NonFormattedError("'read' function requires argument to be a string")
     with open(path.value) as f: s = f.read()
     return DreamberdString(s)
 
-def db_write(path: DreamberdString, content: DreamberdValue) -> None:
-    content = db_to_string(content).value
-    with open(path.value, "w") as f: f.write(content)
+def db_write(path: DreamberdValue, content: DreamberdValue) -> None:
+    if not isinstance(path, DreamberdString):
+        raise NonFormattedError("'read' function requires argument to be a string")
+    content_str = db_to_string(content).value
+    with open(path.value, "w") as f: f.write(content_str)
 
 def db_exit() -> None:
     exit()
